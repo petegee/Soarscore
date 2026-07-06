@@ -21,7 +21,7 @@ results on their own devices, and sync between devices) remains a
 
 | User | Software role | Interaction | Primary areas |
 |---|---|---|---|
-| Organiser | Administrator / setup | Direct, hands-on | 1, 2.1, 3, 4, 5.3, 5.4, 5.6, 7 |
+| Organiser | Administrator / setup | Direct, hands-on | 1, 2.1, 3, 4.1, 4.2, 4.4, 5.3, 5.4, 5.6, 7 |
 | Contest Director | Officiating authority | Direct, decisions | 2.2, 4.3, 5.3, 5.5, penalties, 7 |
 | Scorer | Per-competitor field recorder | Direct, device-based, one per pilot | 5.0, 5.1, 5.2 |
 | Announcer / Timekeeper | Field-aid operator | Direct, on-field | 6 |
@@ -66,6 +66,7 @@ it is *run* belong to the Contest Director.
 | Configure a competition — identity, discipline, entry options, roster, draw/scoring/task rules | [3](high-level-requirements.md#area-3--competition-setup--configuration) |
 | Specify, generate and adjust the draw | [4.1](high-level-requirements.md#area-4--draw--rounds-generation), [4.2](high-level-requirements.md#area-4--draw--rounds-generation), [4.4](high-level-requirements.md#area-4--draw--rounds-generation) |
 | Administer scores — corrections, cross-round review, group moves/re-flights, outlier/missing validation | [5.3](high-level-requirements.md#area-5--scoring), [5.4](high-level-requirements.md#area-5--scoring), [5.6](high-level-requirements.md#area-5--scoring) |
+| Ensure no group scores with a single pilot — prefer avoiding it in the draw, else insert a random dummy for the lone pilot to be normalised against (not auto-1000); where a class annuls instead (e.g. F3B) the override is the Contest Director's to approve | [4.2](high-level-requirements.md#area-4--draw--rounds-generation), [5.3](high-level-requirements.md#area-5--scoring) |
 | Produce draw and results reports | [7](high-level-requirements.md#area-7--reports) |
 
 ### 2. Contest Director
@@ -90,6 +91,8 @@ result. Highest privilege; often the same person as the Organiser in practice.
 | Validate the draw's fairness and accept or re-draw | [4.3](high-level-requirements.md#area-4--draw--rounds-generation) |
 | Impose penalties for infringements | [Area 5 — penalties](high-level-requirements.md#area-5--scoring) |
 | Approve re-flights and group changes | [5.3](high-level-requirements.md#area-5--scoring) |
+| Move a pilot from one group to another for pilot readiness (does **not** change the draw) | [5.3](high-level-requirements.md#area-5--scoring) |
+| Approve the per-contest override to insert a dummy where a class rule would annul a lone-pilot group instead (e.g. F3B) | [5.3](high-level-requirements.md#area-5--scoring) |
 | Retire and reinstate pilots | [5.5](high-level-requirements.md#area-5--scoring) |
 | Lock the competition against further changes | [2.2](high-level-requirements.md#area-2--competition-lifecycle) |
 | Publish official results | [7](high-level-requirements.md#area-7--reports) |

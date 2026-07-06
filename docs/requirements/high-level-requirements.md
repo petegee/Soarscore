@@ -58,7 +58,7 @@ Everything that defines how a specific competition scores and runs.
 
 | Sub-area | Description |
 |---|---|
-| 3.1 Create Competition | Capture identity (name, venue, date); optionally seed from a template; support fly-off competitions. |
+| 3.1 Create Competition | Capture identity (name, venue, date); optionally seed from a template. |
 | 3.2 Discipline Selection | Choose the competition discipline, which determines available tasks and rules. |
 | 3.3 Entry Options | Toggle features that shape the roster and results: start numbers, pilot classes. |
 | 3.4 Roster Entry | Build the competition roster from master pilots; edit per-entry attributes (e.g. start number, class); replace entrants after the draw. |
@@ -75,10 +75,9 @@ Producing fair round-by-round flight groups, then validating and adjusting them.
 | Sub-area | Description |
 |---|---|
 | 4.1 Draw Specification | Set draw mode, groups-per-round, and consecutive-flight constraints, within bounds implied by roster/task. |
-| 4.2 Generate Draw | Produce the flight groups for a chosen number of rounds, retaining the fairest of multiple attempts. |
+| 4.2 Generate Draw | Produce the flight groups for a chosen number of rounds, retaining the fairest of multiple attempts. Where the roster allows, **avoid producing a group with only one scoring pilot** (see the [5.3](#area-5--scoring) lone-pilot safeguard). |
 | 4.3 Validate Draw | Report matchup distribution and a fairness metric; allow re-draw. |
 | 4.4 Adjust Lanes | Review and manually reassign lane allocations after the draw. |
-| 4.5 Progressive/Seeded Draw | Support draws where later rounds are seeded from prior-round scores; handle pilot retirement/reinstatement. |
 
 ---
 
@@ -97,7 +96,7 @@ of interest). See [users.md](users.md).
 | 5.0 Device Assignment | The Scorer selects, from the group's pilot list on the device, the competitor they are scoring so entries attribute correctly; the device shows the selected pilot for pre-group confirmation (Scorer's responsibility, pilot cross-checks); supports re-selecting the pilot between consecutive groups without swapping devices. **Pre-group confirmation guard:** the device blocks score entry for a group until its pilot has been deliberately (re-)confirmed for that group, so a stale selection carried over from the previous group cannot silently capture scores. |
 | 5.1 Score Entry | Each Scorer captures the adjacent competitor's flight result live, with immediate confirmation against the right competitor; supports many Scorers capturing concurrently within a group. |
 | 5.2 Task Scoring Screens | Capture the inputs each task requires (times, landings, laps, heights, motor runs, penalties). *Discipline-specific layouts deferred to per-discipline requirements.* |
-| 5.3 Re-Flights & Group Management | Move pilots between groups, re-fly, create, or split groups, with clash checks. |
+| 5.3 Re-Flights & Group Management | Move pilots between groups, re-fly, create, or split groups, with clash checks. A **pilot-readiness group move** reassigns a pilot to another group **without regenerating the draw** — it does not invoke the [Area 4](#area-4--draw--rounds-generation) anti-repeat matrix and leaves all other pilots' groupings untouched (contrast [5.5 Pilot Retirement](#area-5--scoring), which *does* re-draw remaining rounds). **Lone-pilot safeguard:** no group may score with a single competitor — if one would, and the draw could not avoid it ([4.2](#area-4--draw--rounds-generation)), insert a **randomly-chosen dummy** from the other pilots for the lone pilot to be normalised against, so they are not auto-awarded the group winner's 1000 ([general-rules §3](rules/00-general-rules.md#3-group-score-normalisation)); the dummy's flight **does not count** toward that pilot's own score. Where a class rule dictates a different outcome — e.g. **F3B annuls a one-valid-result group** ([f3b.md](rules/f3b.md)) — the dummy is **not** applied automatically: the system **warns and requires the Contest Director's explicit approval, scoped to that one contest**, before proceeding. |
 | 5.4 Score by Pilot | Review/enter a single pilot's scores across all rounds. |
 | 5.5 Pilot Retirement | Retire a pilot and re-draw remaining rounds to exclude them; reinstate if needed. |
 | 5.6 Score Validation | Flag outlier/missing scores against configurable limits, per pilot or overall. |
@@ -126,7 +125,7 @@ Turning competition data into printable output at any stage of the event.
 | Sub-area | Description |
 |---|---|
 | 7.1 Results Reports | Overall, positional, round-by-round, landing, and ranked results, with scope filters and round-range selection. |
-| 7.2 Custom Reports | Branded/customisable report layouts, including combined preliminary + fly-off results. |
+| 7.2 Custom Reports | Branded/customisable report layouts. |
 | 7.3 Draw Reports | Draw details in multiple layouts and sort orders; scoring sheets. |
 | 7.4 Score Cards & Records | Printable per-pilot score cards and records. |
 
@@ -164,6 +163,13 @@ areas above when scoped.
   one-Scorer-per-competitor model.
 - Machine-readable / hardware-assisted score capture (e.g. automated timing).
 - *Pilots scoring their own flights is **out of scope** — a conflict of interest.*
+
+**Fly-offs & progressive draws** *(MVP is qualifying rounds only)*
+- Fly-off competitions — a final flown as a single group of the top qualifiers,
+  linked to their qualifier (was part of 3.1).
+- Progressive / seeded draws — draws where later rounds (e.g. a fly-off re-draw)
+  are seeded from prior-round scores rather than the anti-repeat matrix (was 4.5).
+- Combined preliminary + fly-off reporting (was part of 7.2).
 
 **Multi-competition**
 - Merge — consolidate rosters into shared flight groups, or append one competition into another.
