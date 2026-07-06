@@ -21,6 +21,11 @@ back in as the MVP matures.
 needs and tasks. (Non-flying officials such as Team Manager and Jury are deferred
 beyond the MVP.)
 
+For a one-screen picture of how these areas and roles fit together — a Base
+Station running the competition management software, N Scorer Devices capturing
+live, and each user attached by role — see the
+[logical high-level architecture](../architecture/logical-architecture.md).
+
 ---
 
 ## Area 1 — Master Data Management
