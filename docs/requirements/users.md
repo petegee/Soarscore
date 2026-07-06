@@ -185,20 +185,20 @@ the pilot *reads* the draw and results. Pilots do **not** self-score (a conflict
 interest), so they remain an indirect user by design.
 
 **Key needs**
-- To know **when and in which group** they fly, and on what frequency/lane.
+- To know **when and in which group** they fly, and in which lane.
 - **Assurance their flight is being recorded against them** — the ability to
   cross-check, before the group begins, that the Scorer's device is set to their
   name.
 - Results that are **correct, transparent and promptly available** — position,
   round-by-round breakdown, and drop-worst applied correctly.
-- Assurance the **draw is fair** and their entry details (frequency, team, class)
-  are right.
+- Assurance the **draw is fair** and their entry details (e.g. class, start
+  number) are right.
 
 **Tasks (mediated through officials and reports)**
 
 | Task | Area |
 |---|---|
-| Provide/confirm entry details (frequency, team, class) via the roster | [3.4](high-level-requirements.md#area-3--competition-setup--configuration) |
+| Provide/confirm entry details (e.g. class, start number) via the roster | [3.4](high-level-requirements.md#area-3--competition-setup--configuration) |
 | Cross-check the Scorer's device is set to their name before the group begins | [5.0](high-level-requirements.md#area-5--scoring) |
 | Fly; result entered on their behalf by the Scorer | [5.2](high-level-requirements.md#area-5--scoring) |
 | Read the draw, flying order and results | [7.1](high-level-requirements.md#area-7--reports), [7.3](high-level-requirements.md#area-7--reports), [7.4](high-level-requirements.md#area-7--reports) |

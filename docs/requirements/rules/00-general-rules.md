@@ -12,6 +12,15 @@ what precision), and how group / round / final scores are computed. Construction
 wingspan, wind limits, flying-site geometry, roles and re-flight mechanics are out
 of scope.
 
+> **MVP scope note.** The MVP is **individual-only** and assumes **all
+> competitors fly 2.4 GHz spread-spectrum**. Accordingly the **team** rules
+> (team separation in the draw, team classification) and the
+> **frequency-management** rules (per-pilot frequency allocation, and the
+> frequency-based grouping that F3B/F3J/F3K use — "frequency follows frequency")
+> described in this family are retained as **sport reference** but are **out of
+> MVP software scope**. They return when those capabilities are built — see
+> [Future Enhancements](../high-level-requirements.md#future-enhancements).
+
 **Sources.** FAI Sporting Code Section 4: *CIAM General Rules* (2026, refs `C.x`);
 *Volume F3 Soaring* (2025 v2, refs `F3x.x`); *Volume F5 Electric* (2026 ed.2, refs
 `5.5.x`). The truly cross-class rules below come from the CIAM General Rules; there

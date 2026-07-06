@@ -55,9 +55,9 @@ Everything that defines how a specific competition scores and runs.
 |---|---|
 | 3.1 Create Competition | Capture identity (name, venue, date); optionally seed from a template; support fly-off competitions. |
 | 3.2 Discipline Selection | Choose the competition discipline, which determines available tasks and rules. |
-| 3.3 Entry Options | Toggle features that shape the roster and results: teams, start numbers, pilot classes. |
-| 3.4 Roster Entry | Build the competition roster from master pilots; edit per-entry attributes (frequency, team, omit-from-team-score); replace entrants after the draw. |
-| 3.5 Draw Options | Configure fairness constraints for the draw: team separation, frequency spacing, helper assignment, lane allocation. |
+| 3.3 Entry Options | Toggle features that shape the roster and results: start numbers, pilot classes. |
+| 3.4 Roster Entry | Build the competition roster from master pilots; edit per-entry attributes (e.g. start number, class); replace entrants after the draw. |
+| 3.5 Draw Options | Configure fairness constraints for the draw: helper assignment, lane allocation. |
 | 3.6 Scoring Options | Configure result computation: group-score basis, rounding/precision, and discard (drop-worst) rules. |
 | 3.7 Task Scoring Rules | Configure per-task parameters generically — target times (incl. per-round overrides), timing precision, points-per-second, landing-bonus table, penalty/deduction types, timekeeper count. *Discipline-specific tasks and special rules are deferred to per-discipline requirements.* |
 
@@ -69,7 +69,7 @@ Producing fair round-by-round flight groups, then validating and adjusting them.
 
 | Sub-area | Description |
 |---|---|
-| 4.1 Draw Specification | Set draw mode, groups-per-round, and consecutive-flight constraints, within bounds implied by roster/frequency/task. |
+| 4.1 Draw Specification | Set draw mode, groups-per-round, and consecutive-flight constraints, within bounds implied by roster/task. |
 | 4.2 Generate Draw | Produce the flight groups for a chosen number of rounds, retaining the fairest of multiple attempts. |
 | 4.3 Validate Draw | Report matchup distribution and a fairness metric; allow re-draw. |
 | 4.4 Adjust Lanes | Review and manually reassign lane allocations after the draw. |
@@ -120,7 +120,7 @@ Turning competition data into printable output at any stage of the event.
 
 | Sub-area | Description |
 |---|---|
-| 7.1 Results Reports | Overall, positional, team, round-by-round, landing, and ranked results, with scope filters and round-range selection. |
+| 7.1 Results Reports | Overall, positional, round-by-round, landing, and ranked results, with scope filters and round-range selection. |
 | 7.2 Custom Reports | Branded/customisable report layouts, including combined preliminary + fly-off results. |
 | 7.3 Draw Reports | Draw details in multiple layouts and sort orders; scoring sheets. |
 | 7.4 Score Cards & Records | Printable per-pilot score cards and records. |
@@ -135,6 +135,17 @@ areas above when scoped.
 **Master data**
 - Models & Devices — pilot aircraft / onboard-device records.
 - Roles — flying/non-flying personnel roles, role-based entry eligibility.
+
+**Teams** *(MVP is individual-only)*
+- Team entry and the `omit-from-team-score` per-entry attribute.
+- Team separation as a draw fairness constraint.
+- Team classification and team-oriented reporting (with the deferred
+  [Team Manager](users.md#deferred-beyond-the-mvp) role).
+
+**Frequency management** *(MVP assumes all competitors on 2.4 GHz spread-spectrum)*
+- Per-entry frequency allocation (single or multiple frequencies per pilot).
+- Frequency-aware draw grouping and spacing — including the
+  "frequency-follows-frequency" grouping used by F3B/F3J/F3K.
 
 **Internationalisation** *(MVP is English-only)*
 - Country codes reference list.
