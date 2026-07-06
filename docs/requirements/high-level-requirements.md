@@ -16,9 +16,10 @@ Capabilities not required for a basic contest are collected under
 [Future Enhancements](#future-enhancements) so the core stays small; pull them
 back in as the MVP matures.
 
-**Roles** referenced throughout: **Organiser / Contest Director**, **Scorer**,
-**Announcer / Timekeeper**, **Pilot** (plus non-flying officials such as Team
-Manager and Jury).
+**Roles** referenced throughout: **Organiser**, **Contest Director**, **Scorer**,
+**Announcer / Timekeeper**, **Pilot**. See [users.md](users.md) for each role's
+needs and tasks. (Non-flying officials such as Team Manager and Jury are deferred
+beyond the MVP.)
 
 ---
 
@@ -80,9 +81,16 @@ Producing fair round-by-round flight groups, then validating and adjusting them.
 
 Capturing flight results and all mid-competition adjustments and validation.
 
+Score capture is **device-based and concurrent**: one Scorer per competitor, each
+on their own device, recording that pilot's metrics live into the shared contest
+management system (1 device → 1 Scorer → 1 competitor). Several Scorers therefore
+capture in parallel within a group. Pilots do **not** score themselves (conflict
+of interest). See [users.md](users.md).
+
 | Sub-area | Description |
 |---|---|
-| 5.1 Score Entry | Capture flight results per group with fast input, live totals, and efficient navigation. |
+| 5.0 Device Assignment | The Scorer selects, from the group's pilot list on the device, the competitor they are scoring so entries attribute correctly; the device shows the selected pilot for pre-group confirmation (Scorer's responsibility, pilot cross-checks); supports re-selecting the pilot between consecutive groups without swapping devices. **Pre-group confirmation guard:** the device blocks score entry for a group until its pilot has been deliberately (re-)confirmed for that group, so a stale selection carried over from the previous group cannot silently capture scores. |
+| 5.1 Score Entry | Each Scorer captures the adjacent competitor's flight result live, with immediate confirmation against the right competitor; supports many Scorers capturing concurrently within a group. |
 | 5.2 Task Scoring Screens | Capture the inputs each task requires (times, landings, laps, heights, motor runs, penalties). *Discipline-specific layouts deferred to per-discipline requirements.* |
 | 5.3 Re-Flights & Group Management | Move pilots between groups, re-fly, create, or split groups, with clash checks. |
 | 5.4 Score by Pilot | Review/enter a single pilot's scores across all rounds. |
@@ -133,8 +141,13 @@ areas above when scoped.
 - Localization / multiple languages.
 
 **Electronic & remote scoring**
-- Electronic scoring for organisers and pilots (remote/device-based entry and sync).
-- Machine-readable score-capture encoding (e.g. QR on score cards).
+- *(In MVP)* Concurrent multi-device capture by Scorers (one device per Scorer,
+  one Scorer per competitor) is core MVP — see [Area 5](#area-5--scoring) — not a
+  future enhancement.
+- Remote / off-site scoring and sync scenarios beyond the on-site
+  one-Scorer-per-competitor model.
+- Machine-readable / hardware-assisted score capture (e.g. automated timing).
+- *Pilots scoring their own flights is **out of scope** — a conflict of interest.*
 
 **Multi-competition**
 - Merge — consolidate rosters into shared flight groups, or append one competition into another.
