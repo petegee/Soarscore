@@ -1,4 +1,4 @@
-# GliderScore — Requirements Structure (User-Story Backbone)
+# Soarscore — Requirements Structure (User-Story Backbone)
 
 ## Purpose
 

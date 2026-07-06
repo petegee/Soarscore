@@ -1193,7 +1193,7 @@ Task E: Poker
 
 ```text
 The Nominal Launch Height is the reference launch altitude (NLH) in which there are no bonus or penalties
-applied and is set in a competition software program (for example Gliderscore). The AMRT is fixed for all
+applied and is set in a competition software program. The AMRT is fixed for all
 wind conditions: 60 m altitude and 7 seconds motor time Pilots can gain bonus points and launch under the
 NLH or get launch penalty points by launching over the NLH. The NLH is related to the strength of the wind.
 For light breeze wind the NLH is 60 meters. For moderate wind speed the NLH is 70 meters. One day before
@@ -1234,7 +1234,7 @@ For each meter from 1 to 10 meter over the NLH: 1.0 points per meter penalty app
 For each meter from 11 meter over the NLH: 3.0 points per meter applies.
 The bonus or penalty points are always calculated with reference to the announced NLH.
 Launch altitudes are shown on the AMRT (fe Altis nano). The NLH bonus and penalty table are set in the
-competition software (ie Gliderscore), which translates the launch altitude to bonus or penalties points.
+competition software, which translates the launch altitude to bonus or penalties points.
 ```
 
 ### 5.5.10.5 Launch and Start flight time:
