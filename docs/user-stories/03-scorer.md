@@ -343,8 +343,9 @@ on sync loss is **keep local + flag**, not freeze.
 ### 5.2.1 — Capture the metrics the task requires
 
 **As a** Scorer, **I want** the device to let me capture whichever metrics the
-current task calls for — flight/working time, landing result, number of
-flights/launches, target-time calls, launch/start height, and applicable
+current task calls for — flight/working time, landing result, per-flight
+records (launch counts are inferred from these, never entered), target-time
+calls, launch/start height, and applicable
 penalties/deductions — **so that** I record exactly what the flight demands and
 nothing irrelevant.
 
@@ -366,8 +367,16 @@ nothing irrelevant.
   configured table downstream — the Scorer records the measurement, not the
   points maths).
 - [ ] Given a multi-flight or last-flight task, when the pilot makes launches,
-  then I can record the **number of flights/launches** and which count, as that
-  task requires.
+  then I can record **each flight as its own record** (flight number, time,
+  task fields) — **which flight(s) count** (last, best-N, sum, targets
+  achieved) is computed by the system from those records, never decided or
+  pre-filtered by me.
+- [ ] Given any metric, when I capture it, then I record the **raw
+  observation only** — tape reading, stopwatch time, AMRT number, lap count —
+  with **no interpretation before entry**: caps, bonus tables, deductions and
+  derived judgements (e.g. an over-working-time flight) are applied by the
+  system from the raw data, consistently for every pilot
+  ([scorer-device.md §1](../requirements/scorer-device.md#1-capture-model--what-a-scorer-records)).
 - [ ] Given a nominated-time (Poker/ladder) task, when the pilot nominates a
   target before a launch, then I can record the **target time and whether it was
   achieved**.
@@ -375,11 +384,14 @@ nothing irrelevant.
   as the task requires (whole metres per
   [general-rules §2](../requirements/rules/00-general-rules.md#2-data-the-timer--helper-collects)).
 
-**Traces to:** area(s) 5.2 · users.md §3 Scorer
+**Traces to:** area(s) 5.2 · users.md §3 Scorer ·
+[scorer-device.md §1](../requirements/scorer-device.md#1-capture-model--what-a-scorer-records)
 **Notes:** Kept deliberately generic. Which concrete tasks map to which metrics,
 and the exact precision/units, are **per-discipline** and deferred; the Scorer
 device is driven by the configured task rules ([3.7](../requirements/high-level-requirements.md#area-3--competition-setup--configuration)),
-not hard-coded per class.
+not hard-coded per class. The **raw-capture principle** (record observations,
+never interpretations) is owner-confirmed and recorded in
+[scorer-device.md §1](../requirements/scorer-device.md#1-capture-model--what-a-scorer-records).
 
 ### 5.2.2 — Input laid out to match the shape of the task
 
@@ -408,15 +420,18 @@ flight's raw result reflects what actually happened at the line.
 
 **Acceptance criteria**
 - [ ] Given the task defines deductions tied to the flight itself — e.g. a
-  **land-out** / overshot landing, the model **contacting a person or obstacle**,
-  an overflown working time, a zero'd flight — when that condition occurs, then I
-  can record it as part of the flight result.
+  **land-out** / overshot landing, the model **contacting a person or obstacle**
+  — when that condition occurs, then I can record the **observed event** as part
+  of the flight result; conditions **derivable from the raw data** (e.g. an
+  overflown working time, from the raw flight time vs the working time) are
+  flagged by the system, not entered by me
+  ([scorer-device.md §1](../requirements/scorer-device.md#1-capture-model--what-a-scorer-records)).
 - [ ] Given a **discretionary disciplinary penalty** — one the Contest Director
   imposes for a rule infringement, dangerous flying, **cheating or unsporting
   behaviour** ([general-rules §6](../requirements/rules/00-general-rules.md#6-penalties-common),
   `C.19.1`) — when such a penalty is warranted, then it is **not** the Scorer's to
-  impose: it is raised to the [Contest Director](02-contest-director.md#5-penalties--impose-penalties-with-correct-recompute)
-  (Area 5 penalties). *(This split is confirmed with the user — see
+  impose: it is raised to the [Contest Director](02-contest-director.md#59--impose-penalties-with-correct-recompute)
+  ([5.9](../requirements/high-level-requirements.md#area-5--scoring)). *(This split is confirmed with the user — see
   [Conflicts & questions](#conflicts--questions-for-the-user) item 1.)*
 
 **Traces to:** area(s) 5.2 · users.md §3 Scorer ·
@@ -446,7 +461,7 @@ They are kept here as a record of the decision and its cross-doc consequences.
    Scorer device. Applied in [5.2.3](#523--record-task-integral-deductions-the-flight-incurs).
    The rule (Director imposes) stays authoritative.
    - **Cross-doc check:** the Director side is already owned by
-     [CD story 5 (penalties)](02-contest-director.md#5-penalties--impose-penalties-with-correct-recompute)
+     [CD story 5.9](02-contest-director.md#59--impose-penalties-with-correct-recompute)
      ("infringements, dangerous flying, cheating or unsporting behaviour … up to
      disqualification"). Its **Notes** have been given a reciprocal line pointing
      at this Scorer/field-deduction boundary so the split is documented from both

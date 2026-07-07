@@ -18,30 +18,28 @@ decision is the owner's to make, **what's needed from you**.
 ## A. The Scorer device front (ESP32 stopwatch handhelds)
 
 Deciding on dedicated custom hardware (D2) opened the largest cluster of new
-unknowns. Most of these belong in a new
-`docs/requirements/scorer-device.md` — hardware, firmware, interaction and
-sync requirements — which does not exist yet and is the single most valuable
-next document.
+unknowns. Most of these belong in
+[`docs/requirements/scorer-device.md`](docs/requirements/scorer-device.md) —
+**drafted 2026-07-07** with proposed defaults for A1–A6, C5 and D, and the
+owner-confirmed capture model (per-flight fields; a pilot can fly more than
+one flight per group). Items below remain until their OPEN questions in that
+doc are answered/approved: **all owner inputs are now resolved
+(2026-07-07)** — A1's split CD override approved and applied; A3 resolved as
+**descriptor-driven capture** (no first class — the base pushes the class
+and collection metadata at competition start); A4 resolved as **reliable at
+100 m line-of-sight** (a scorer is never beyond 100 m of the base). What
+remains across the A items is **prototype validation only**, tracked as the
+checklist at the end of `scorer-device.md`.
 
-### A1. Prep-gate vs an offline device
+### A1. Prep-gate vs an offline device — ✅ RESOLVED 2026-07-07
 
-**Context.** The prep confirmation gate ([5.0](docs/requirements/high-level-requirements.md#area-5--scoring) /
-[6.5](docs/requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids))
-pauses the countdown at T−1:00 until every Scorer confirms. A device that is
-offline (D6: buffer-and-sync) *cannot deliver* its confirmation, so the group
-blocks on a comms fault — and the CD's current override wrongly punishes the
-pilot with a **no-score** for a network problem, conflating *no confirmation
-received* with *pilot cannot fly*.
-
-**Suggested fixes**
-1. *(Recommended)* Split the CD override in two: **"release gate — device
-   offline"** (no no-score; the buffered confirmation reconciles on sync) vs
-   **"release gate — pilot unconfirmed"** (no-score as today).
-2. Let the Announcer/Timekeeper record a **verbal confirmation on the pilot's
-   behalf** at the Base Station when the device is visibly offline.
-3. Show a **sync-state indicator** on each device and on the Base Station's
-   group view, so the field can tell "offline" from "not confirmed" at a
-   glance (complements either fix above).
+**Applied** (fixes 1 + 3, owner-approved). The CD gate release is split in
+two: **"release gate — device offline"** (no no-score; buffered confirmation
+reconciles on sync) vs **"release gate — pilot unconfirmed"** (no-score as
+before); the system never converts a comms fault into a no-score on its own.
+Devices show a **sync-state indicator** and the Base Station group view shows
+each device's state. Written into 6.5/5.7, `users.md`, the CD 6.5/5.7
+stories, and `scorer-device.md` §4.
 
 ### A2. Sync conflict policy
 
@@ -130,131 +128,108 @@ countdown 10 s stale is worse than no countdown.
 **Suggested fix.** State one loose number in the NFRs (e.g. "mirrored
 countdown within ±1 s of the base clock; device hides the countdown and shows
 an offline indicator when it can't hold that") and move on. Not worth more
-design than that.
+design than that. *(Owner tightened the bound to **±0.5 s**, 2026-07-08 —
+see `scorer-device.md` §7.)*
 
 ---
 
 ## B. Rules-and-scoring gaps
 
-### B1. Re-flight entitlement rules are missing from `rules/`
+### B1. Re-flight entitlement rules are missing from `rules/` — ✅ RESOLVED 2026-07-07
 
-**Context.** The rules digest explicitly scoped out "re-flight mechanics", yet
-5.3 requires the software to execute re-flights. Which score counts when a
-re-flight pilot flies as a filler in another group (better-of? re-flight
-stands?) is a per-class FAI rule the software must enforce — currently
-unsourced, so 5.3 stories can't be finished without guessing.
+**Context.** The rules digest had scoped out "re-flight mechanics", yet 5.3
+requires the software to execute re-flights.
 
-**Suggested fixes**
-1. *(Recommended)* Run an extraction pass over `rules/source-docs/` for each
-   class's re-flight provisions and add a re-flight section to the family and
-   per-class rule docs (this is tracking the sport, so it is a legitimate
-   `rules/` update).
-2. Until then, mark 5.3's scoring outcome **"pending rules extraction"** in
-   the story docs rather than inventing behaviour.
+**Applied.** Extraction pass over `rules/source-docs/` done (a legitimate
+`rules/` update — tracking the sport). Added **§7 Re-flights (common
+pattern)** to `00-general-rules.md` (entitlement themes, claim/waiver
+discipline, 3-priority placement, the which-score-counts rule), family notes
+to `f3-general-rules.md` / `f5-general-rules.md`, and a **§6 Re-flights**
+section to each of the six per-class docs. Key findings: the allocated
+re-flyer scores the **re-flight even if worse**; filler pilots score the
+**better of** their two flights; F3K/F5K grant **no** re-flight for a free-
+flight mid-air; F5J's new-group minimum is 6 (others 4); **F5L states no
+placement/scoring rule at all** (recorded as a CD decision, not invented).
+The 5.3 stories (Organiser prepare, CD approve) gained acceptance criteria
+enforcing the which-score-counts rule.
 
-### B2. Normalisation degenerate cases
+### B2. Normalisation degenerate cases — ✅ RESOLVED 2026-07-07
 
-**Context.** `score = raw / winner × 1000` has undefined corners the
-requirements never touch: every raw score in the group is zero (divide by
-zero); ties for group winner; a penalty driving a final score negative (the
-rules floor it at zero, but no *requirement* says so).
+**Context.** `score = raw / winner × 1000` had undefined corners: all-zero
+group (divide by zero), ties for group winner, and a penalty driving a final
+score negative.
 
-**Suggested fixes**
-1. Add acceptance criteria to the scoring stories: all-zero group → all score
-   0 (not an error); tied winners → both 1000; negative final → recorded as 0
-   with penalties still logged (mirrors
-   [general-rules §6](docs/requirements/rules/00-general-rules.md#6-penalties-common)).
-2. Fold these into the eventual per-discipline scoring specs as shared test
-   cases — they are exactly the cases a future test suite should start from.
+**Applied.** All three are acceptance criteria on the Organiser's **3.6
+Configure scoring options** story: all-zero group → all score 0 (not an
+error); tied winners → each scores 1000; negative aggregate → recorded as 0
+with penalties still logged (the last also enforced by requirement 5.9 and the
+CD's 5.9 story from B3). The story's Notes flag them as **shared test cases**
+to carry into each per-discipline scoring spec. Note the all-zero and tie
+behaviours are *requirement decisions* for corners the FAI text leaves
+undefined — recorded in the story docs, not in `rules/`.
 
-### B3. Penalties have no sub-area (internal inconsistency)
+### B3. Penalties have no sub-area (internal inconsistency) — ✅ RESOLVED 2026-07-07
 
-**Context.** `users.md` cross-references "Area 5 — penalties" for the Contest
-Director, but Area 5 has no penalties sub-area — imposition, per-round
-recording, deduction from the final aggregate, and survival of drop-worst are
-requirements with no home. Flagged per house-keeping rule 2; **not yet
-applied, awaiting your approval**.
+**Context.** `users.md` cross-referenced "Area 5 — penalties" for the Contest
+Director, but Area 5 had no penalties sub-area.
 
-**Suggested fix.** Add **5.9 Penalties** (5.8 is now Manual Entry): CD imposes
-a penalty against a pilot and round; cumulative; deducted from the final
-aggregate; retained when the round is dropped; floor at zero (B2); every
-imposition in the event log (D4). Repoint the `users.md` reference. Say the
-word and I'll add it.
+**Applied.** Added **5.9 Penalties** to `high-level-requirements.md` Area 5:
+CD imposes a penalty against a pilot and round; cumulative; deducted from the
+final aggregate; retained when the round is dropped; floor at zero (B2); every
+imposition/revocation in the event log (D4); distinct from Scorer-captured
+task-integral deductions (5.2). Repointed the `users.md` references and
+renumbered the CD user story ("5 (penalties)" → 5.9), including the anchors in
+`03-scorer.md`.
 
 ---
 
 ## C. Contest-operation edges
 
-### C1. Mid-contest running results, offline
+### C1. Mid-contest running results, offline — ✅ RESOLVED 2026-07-07
 
-**Context.** FAI requires each round's results displayed as the contest
-proceeds (`C.16.1 g`). The live web page is post-MVP and internet-dependent
-(D6). Between rounds, at the field, offline — how do pilots see standings?
+**Applied** (fix 2, owner-chosen: no easy real-time access today, so the
+base-station screen is the minimal answer). 7.1 now states: cumulative
+standings and each completed round's results are **viewable on the Base
+Station screen** (clubhouse table) between rounds — satisfying `C.16.1 g`
+offline; printing stays available; the local-Wi-Fi phone page stays a Future
+Enhancement. Pilot results story updated to match.
 
-**Suggested fixes**
-1. *(Recommended, simplest)* **Print cumulative standings after each round**
-   (Area 7 already has round-range reports; make "after each round" a stated
-   use, pinned to the clubhouse table).
-2. A results page on the Base Station screen pilots can walk up and read.
-3. Base station serves a **local-Wi-Fi results page** to pilots' phones — no
-   internet needed, but it drags in scope; park as a future enhancement
-   alongside the public page.
+### C2. Contest abandoned early / minimum valid rounds — ✅ RESOLVED 2026-07-07
 
-**Needed from you:** what do you do today at your club events? Match that.
+**Applied** (owner decision — stricter than suggested fix 1): if the contest
+completes **fewer rounds than the class rules' minimum**, it is a
+**no-contest** — locked with **no official results**, data and event log
+retained. At or above the minimum, lock is legal at any round count, reports
+state rounds flown, and drop-worst applies only past its class threshold.
+Written into 2.2 and the CD's 2.2 Lock story.
 
-### C2. Contest abandoned early / minimum valid rounds
+### C3. Mid-contest configuration change — ✅ RESOLVED 2026-07-07
 
-**Context.** Weather kills day two after round 3. Classes have
-minimum-rounds-for-validity notions; drop-worst thresholds also depend on
-rounds flown. Nothing says the system can finalise a truncated contest.
+**Applied** (fixes 1 + 2 combined). Area 3 now has a **mid-contest
+configuration changes** rule: after round 1 starts, changes affecting
+scoring/running (3.5–3.8) require **CD authority**, are event-logged (D4),
+and the system states which rounds' scores would recompute **before**
+applying; changes apply **next-round-onward by default**, with recomputing
+flown rounds an explicit CD opt-in — never silent. New CD story
+("3 (mid-contest) — Authorise a mid-contest configuration change") and
+`users.md` task row added.
 
-**Suggested fixes**
-1. Requirement: **Lock is legal at any round count**; final reports state
-   rounds flown, and drop-worst applies only when the class threshold is met
-   (the per-class docs carry the thresholds).
-2. Add a story for "contest ends early": CD locks after round N, reports are
-   correct and honest about it.
+### C4. Multi-day resume semantics — ✅ RESOLVED 2026-07-07
 
-**Needed from you:** do your club events follow the FAI minimum-round
-conventions, or is "whatever we flew counts" the local practice?
+**Applied** (fixes 1 + 2 combined). 2.3 now states: suspend is allowed at any
+**group boundary including mid-round** (warned, not blocked); on resume the
+round simply continues; the Scorer correction window is bounded by
+**next-round start, not wall-clock**, so it spans the night. Also closed a
+coverage gap found along the way: **no story covered 2.3 at all** — added an
+Organiser 2.3 story (including resume-after-power-loss from the event log)
+and assigned 2.3 to the Organiser in `users.md`.
 
-### C3. Mid-contest configuration change
+### C5. F5 launch-height entry path — ✅ RESOLVED 2026-07-08
 
-**Context.** Wrong target time discovered in round 3. What recomputes, what is
-frozen, whose authority? Silent recompute of already-flown rounds would be a
-scandal generator even in a trusting club.
-
-**Suggested fixes**
-1. *(Recommended)* Config changes after round 1 require **CD authority**, are
-   event-logged (D4), and the system states which rounds' scores recompute as
-   a consequence before applying.
-2. Per-round config snapshots: a change applies **from the next round
-   onward** unless the CD explicitly opts to recompute flown rounds.
-3. Freeze all task config at first-round start; only manual score override
-   (5.8) can touch the past — simplest, bluntest.
-
-### C4. Multi-day resume semantics
-
-**Context.** Suspend/resume is now MVP (2.3), but one detail interacts with
-the round-completeness gate: can day one end **mid-round** (some groups flown,
-scores incomplete), and does the correction-window rule ("edit until next
-round starts") stretch overnight?
-
-**Suggested fixes**
-1. *(Recommended)* Allow suspend at any group boundary; on resume the round
-   simply continues, and the Scorer correction window (bounded by
-   next-round-start, not by wall-clock) naturally spans the night.
-2. Encourage-but-don't-force round boundaries: warn the Announcer when
-   suspending mid-round.
-
-### C5. F5 launch-height entry path
-
-**Context.** F5J/F5K/F5L launch height comes from the on-board AMRT, read as a
-number after the flight. Where is it keyed — the round-screen device or the
-base? (Sub-case of A3, called out because it's per-family, not per-task.)
-
-**Suggested fix.** Base-side entry alongside landing verification, unless the
-device flow in A3 proves multi-digit entry is comfortable. Decide with A3.
+**Applied** (owner decision — opposite of the suggested default): the AMRT
+launch height is keyed **on the hand-held device**, at flight or group end,
+like the landing tape reading. Written into `scorer-device.md` §1/§2;
+on-device multi-digit entry is now a prototype validation (Open item 5).
 
 ---
 
@@ -271,12 +246,10 @@ should be a written requirement.
 
 ## Suggested order of attack
 
-1. Commission **`docs/requirements/scorer-device.md`** (covers A1–A6, C5, D) —
-   written as questions-with-proposed-defaults where your input is listed
-   above.
-2. Approve/adjust **B3 (5.9 Penalties)** — five-minute fix, closes a dangling
-   cross-reference.
-3. **B1 rules extraction** for re-flights — unblocks finishing the 5.3
-   stories.
-4. Fold **B2, C1–C4** into the relevant areas/stories as acceptance criteria —
-   each is small once you've answered the "needed from you" questions.
+1. ~~Commission **`docs/requirements/scorer-device.md`**~~ — ✅ drafted
+   2026-07-07 (questions-with-proposed-defaults); its OPEN items are what
+   remains of A1, A3, A4 and C5.
+2. ~~Approve/adjust **B3 (5.9 Penalties)**~~ — ✅ done 2026-07-07.
+3. ~~**B1 rules extraction** for re-flights~~ — ✅ done 2026-07-07.
+4. ~~Fold **B2, C1–C4** into the relevant areas/stories~~ — ✅ all done
+   2026-07-07.

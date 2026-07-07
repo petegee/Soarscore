@@ -134,6 +134,42 @@ is deferred to per-discipline requirements. Consumed by
 these stories only *respect* the locked state. Deletion of a competition with real
 data is a destructive unhappy path worth guarding.
 
+### 2.3 — Suspend at end of day and resume the next day
+
+**As an** Organiser, **I want** to suspend the competition at the end of day one
+and resume it the next morning with all state intact, **so that** a routine
+two-day event ([decisions.md D7](../requirements/decisions.md#d7--scale-bounds-and-multi-day-operation))
+just carries on where it stopped.
+
+**Acceptance criteria**
+- [ ] Given a running competition, when I suspend it, then on resume the contest
+  state — completed rounds, captured scores, draw position, round-in-progress
+  status — carries over **intact**
+  ([2.3](../requirements/high-level-requirements.md#area-2--competition-lifecycle)).
+- [ ] Given a round in progress (some groups flown, scores incomplete), when I
+  suspend at a **group boundary**, then I am **warned that the round is
+  incomplete** but not blocked; on resume the round **simply continues** with
+  the remaining groups.
+- [ ] Given the **Scorer correction window** is bounded by next-round start, not
+  wall-clock ([Area 5](../requirements/high-level-requirements.md#area-5--scoring)),
+  when the competition resumes the next day with the same round still open, then
+  a Scorer can still correct a value they captured the previous day — the window
+  **spans the overnight suspension**.
+- [ ] Given an **unplanned shutdown** (e.g. base-station power loss) instead of a
+  clean suspend, when the system restarts, then it resumes into the **correct
+  contest state** reconstructed from the event log
+  ([decisions.md D4](../requirements/decisions.md#d4--immutable-event-log);
+  [scorer-device.md §9](../requirements/scorer-device.md#9-environment-envelope-d)).
+- [ ] Given a suspend or resume, when it happens, then it is recorded in the
+  event log.
+
+**Traces to:** area 2.3 · users.md §1 Organiser
+**Notes:** Suspension is **lifecycle administration** (Organiser); it is distinct
+from the Contest Director's run-control pause of a group's preparation
+([6.5](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids))
+and from the Announcer's round advance ([6.4](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids)).
+Suspend happens **between groups**, never inside a running group's working time.
+
 ---
 
 ## Area 3 — Competition Setup & Configuration
@@ -264,17 +300,35 @@ results are computed correctly for the discipline without me doing the maths.
   score, then the choice respects the class's rounding unit.
 - [ ] Given a discipline, when I configure **drop-worst**, then the setting defaults
   from the class rule — discard applies only once more than a class-specific number
-  of rounds is flown, and **F3J qualifying has no discard**
+  of rounds is flown (e.g. more than 4 for F5J, more than 7 for F3J)
   ([00-general-rules §5](../requirements/rules/00-general-rules.md)) — and I am
   warned if I deviate from it (see Conflicts).
 - [ ] Given drop-worst is in effect, when results compute, then **penalties are
   retained even if the round they occurred in is dropped**
   ([00-general-rules §5–6](../requirements/rules/00-general-rules.md)).
+- [ ] **(Degenerate case)** Given a group in which **every raw score is zero**,
+  when the group score computes, then **every pilot in the group scores 0** — the
+  normalisation does not divide by zero and does not raise an error.
+- [ ] **(Degenerate case)** Given two or more pilots **tie for the best raw
+  result** in a group, when the group score computes, then **each of the tied
+  pilots scores 1000** and the others scale to that shared best (consistent with
+  the formula in
+  [00-general-rules §3](../requirements/rules/00-general-rules.md#3-group-score-normalisation);
+  the same holds for the inverted speed-task ratio on a tied best time).
+- [ ] **(Degenerate case)** Given penalties that would take a final aggregate
+  **below zero**, when results compute, then the aggregate is recorded as **0**
+  with the penalties still logged
+  ([00-general-rules §6](../requirements/rules/00-general-rules.md#6-penalties-common);
+  imposition itself is the Contest Director's
+  [5.9](02-contest-director.md#59--impose-penalties-with-correct-recompute)).
 
 **Traces to:** area 3.6 · users.md §1 Organiser
 **Notes:** The Organiser configures scoring but the *numbers* are authoritative in
 the per-class rule docs. Free configuration of drop-worst must not be allowed to
 **contravene** the class rule — see [Conflicts & questions](#conflicts--questions-for-the-user).
+The three degenerate cases above are deliberate **shared test cases**: carry them
+into each per-discipline scoring spec as it is written, so every class's
+computation is exercised against the same corners.
 
 ### 3.7 — Configure per-task scoring rules
 
@@ -419,7 +473,17 @@ real-world disruptions under the Contest Director's authority.
   required before proceeding (this story records that handoff rather than granting
   approval here).
 - [ ] Given a re-flight approved by the Director, when its new result is captured,
-  then scoring recomputes consistently for the affected group/round.
+  then scoring recomputes consistently for the affected group/round, applying the
+  class's **which-score-counts rule**
+  ([00-general-rules §7](../requirements/rules/00-general-rules.md#7-re-flights-common-pattern)):
+  for the pilot(s) **allocated the re-flight**, the re-flight result is the
+  official score **even if worse**; for every other pilot flying in that group
+  (random-draw fillers, or the original group re-flying), the **better of** their
+  original flight and the re-flight counts.
+- [ ] Given a re-flight is placed in a **new group of re-flyers**, when I prepare
+  it, then the group is filled to the class minimum (**4**; **6 for F5J**) by
+  **random draw** from the other competitors, and the fillers' better-of scoring
+  applies as above ([00-general-rules §7](../requirements/rules/00-general-rules.md#7-re-flights-common-pattern)).
 
 **Traces to:** area 5.3 · users.md §1 Organiser (+ Contest Director for approval)
 **Notes:** **Handoff:** *approving* re-flights and group changes is the Contest
@@ -550,6 +614,7 @@ covered:
 
 - Master data (Area 1) → 1.1, 1.2, 1.3
 - Create/open/delete (2.1) → 2.1
+- Suspend/resume across days (2.3) → 2.3
 - Configure a competition (Area 3) → 3.1–3.7
 - Specify/generate/adjust the draw (4.1, 4.2, 4.4) → 4.1, 4.2, 4.4
 - Administer scores (5.3, 5.4, 5.6) → 5.3, 5.4, 5.6
@@ -578,7 +643,7 @@ requirements docs.
 2. **Drop-worst configuration (3.6) — resolved, applied.** Area 3.6 presented
    discard (drop-worst) as freely configurable, but
    [00-general-rules §5](../requirements/rules/00-general-rules.md) makes it
-   **class-specific** (**F3J qualifying has no discard**). Resolution: the class
+   **class-specific** (thresholds differ per class). Resolution: the class
    rule is the **default and guardrail** — drop-worst pre-fills from the discipline,
    and any deviation requires an explicit "deliberate deviation from FAI rule"
    confirmation surfaced in reports. Story 3.6 is written to this.

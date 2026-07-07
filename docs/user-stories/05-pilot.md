@@ -241,8 +241,8 @@ arrived at and trust it.
   ([general-rules §3](../requirements/rules/00-general-rules.md#3-group-score-normalisation)).
 - [ ] Given the class applies **drop-worst**, when my aggregate is shown, then my
   **discarded (lowest) round is identifiable** and the aggregate reflects the
-  discard; where the class has **no qualifying discard** (e.g. F3J qualifying), no
-  round is dropped
+  discard; where the rounds flown are **at or below the class threshold** (e.g.
+  7 or fewer in F3J, 4 or fewer in F5J), no round is dropped
   ([general-rules §5](../requirements/rules/00-general-rules.md#5-final-classification-common)).
 - [ ] Given a **penalty** was imposed on me, when I read the results, then it is
   **visible** and **deducted from the final aggregate**, and it is **retained even
@@ -251,9 +251,12 @@ arrived at and trust it.
   ([general-rules §5](../requirements/rules/00-general-rules.md#5-final-classification-common),
   [§6](../requirements/rules/00-general-rules.md#6-penalties-common)).
 - [ ] Given the contest is still under way, when a round completes, then **that
-  round's results are available as the contest proceeds** — I do not have to wait
-  for the whole contest to end to see my standing
-  ([general-rules §5](../requirements/rules/00-general-rules.md#5-final-classification-common)).
+  round's results and the cumulative standings are readable on the Base Station
+  screen** (e.g. on the clubhouse table) between rounds — available as the
+  contest proceeds, with no internet required; I do not have to wait for the
+  whole contest to end to see my standing
+  ([7.1](../requirements/high-level-requirements.md#area-7--reports);
+  [general-rules §5](../requirements/rules/00-general-rules.md#5-final-classification-common)).
 
 **Traces to:** area(s) 7.1, 7.4 · users.md §5 Pilot / Competitor ·
 [general-rules §3, §5, §6](../requirements/rules/00-general-rules.md)

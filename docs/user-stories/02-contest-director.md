@@ -13,11 +13,13 @@ privilege.
 [`users.md §2`](../requirements/users.md#2-contest-director):
 
 - **Area 2.2** — lock the competition against further changes
+- **Area 3 (mid-contest changes)** — authorise configuration changes after the
+  contest has started, with stated recompute consequences
 - **Area 4.3** — validate the draw's fairness and accept or re-draw
 - **Area 5.3 (authority slice)** — approve re-flights and group changes; move a
   pilot between groups for readiness; approve the per-contest lone-pilot dummy
   override where a class rule would annul instead
-- **Area 5 — penalties** — impose penalties, with correct recompute
+- **Area 5.9** — impose penalties, with correct recompute
 - **Area 5.5** — retire and reinstate pilots, re-drawing remaining rounds
 - **Area 5.7** — resolve a no-scored (did-not-fly) pilot: move to a later group,
   retire, or let it auto-zero at round end
@@ -75,6 +77,15 @@ outcome while reports remain available for anyone to read.
   applied, then it is **attributable** to me so a post-lock correction stays
   defensible, and any already-published result must be **re-published** after the
   correction (see [7](#7--publish-official-results)).
+- [ ] Given the contest **ends early** (e.g. weather kills day two), when I lock
+  it with fewer completed rounds than the **class rules' minimum for a valid
+  contest** (per the [per-class rule docs](../requirements/rules/) — e.g. 4 for
+  F3J/F5J, 5 for F3K), then it is finalised as a **no-contest**: locked, **no
+  official results** produced, and the captured data and event log retained.
+- [ ] Given the contest ends early but the class minimum **is** met, when I lock
+  it, then locking is legal at that round count, the final reports **state the
+  rounds flown**, and drop-worst applies **only if the class threshold is
+  passed** ([general-rules §5](../requirements/rules/00-general-rules.md#5-final-classification-common)).
 
 **Traces to:** area 2.2 · users.md §2 Contest Director
 **Notes:** Lock is the Director's authority, **not** the Organiser's — the
@@ -82,6 +93,49 @@ Organiser stories only *respect* the locked state. Unlock is **Director-only**
 and attributable; a correction made after unlocking forces a re-lock and a
 re-publish. **Publishing (7) requires a lock first**, so the official result is
 always a frozen snapshot — see [7](#7--publish-official-results).
+
+---
+
+## Area 3 — Competition Setup (authority slice)
+
+### 3 (mid-contest) — Authorise a mid-contest configuration change
+
+**As the** Contest Director, **I want** any configuration change after the first
+round has started (e.g. a wrong target time discovered in round 3) to require my
+authority, with its recompute consequences stated before it applies, **so that**
+already-flown rounds are never silently rescored.
+
+**Acceptance criteria**
+- [ ] Given the first round has started, when anyone attempts a change to
+  configuration that affects scoring or running (draw options, scoring options,
+  task rules, field-aid timings —
+  [3.5–3.8](../requirements/high-level-requirements.md#area-3--competition-setup--configuration)),
+  then it does **not take effect without my authorisation**.
+- [ ] Given a proposed change, when I review it, then the system **states which
+  rounds' scores would recompute** as a consequence — before anything is
+  applied.
+- [ ] Given my authorisation, when the change applies, then it applies **from
+  the next round onward by default**; recomputing **already-flown rounds**
+  happens only on my **explicit opt-in**, never silently.
+- [ ] Given I opt in to recomputing flown rounds, when scores recompute, then
+  the affected groups re-normalise and round/final scores update consistently
+  (as for any recompute — [00-general-rules §3–5](../requirements/rules/00-general-rules.md)).
+- [ ] Given any mid-contest change (and my authorisation or refusal), when it is
+  processed, then it is recorded in the **event log**
+  ([decisions.md D4](../requirements/decisions.md#d4--immutable-event-log)) and
+  attributable, so the result stays defensible.
+- [ ] Given a proposed change that would **contravene a class rule**, when I
+  review it, then I am warned (the rule docs are authoritative — the same
+  guardrail as [Organiser 3.6](01-organiser.md#36--configure-scoring-options)).
+
+**Traces to:** area 3 (mid-contest changes) · users.md §2 Contest Director
+**Notes:** Before the first round starts, configuration is the **Organiser's**
+free-hand setup ([Area 3](01-organiser.md#area-3--competition-setup--configuration));
+this story begins where flying begins. Roster changes after the draw are
+handled by [3.4](01-organiser.md#34--build-and-edit-the-roster) /
+[5.5](#55--retire-and-reinstate-pilots-re-drawing-remaining-rounds), not here.
+Distinct from **manual score override** ([5.8](../requirements/high-level-requirements.md#area-5--scoring)),
+which corrects a captured value rather than the rules it was scored under.
 
 ---
 
@@ -149,6 +203,14 @@ correctly.
   group re-normalises to its best raw result = 1000
   ([00-general-rules §3](../requirements/rules/00-general-rules.md)) and the
   affected pilots' round and final scores update.
+- [ ] Given the re-flight was flown in a new group of re-flyers or with the
+  original group at the end of the round, when scores compute, then the pilot(s)
+  **allocated the re-flight** take the re-flight result as their official score
+  **even if worse**, while every other pilot in that group takes the **better
+  of** their original flight and the re-flight
+  ([00-general-rules §7](../requirements/rules/00-general-rules.md#7-re-flights-common-pattern));
+  a filler is not granted a further re-flight if the re-flight itself is
+  hindered.
 - [ ] Given a proposed change that a clash check has flagged as violating a draw
   constraint, when I review it, then I see the reason before deciding, and I do
   not approve an invalid change unknowingly.
@@ -225,7 +287,7 @@ rule.
 never be applied against a class rule without my explicit, contest-scoped
 approval — the rule docs are authoritative.
 
-### 5 (penalties) — Impose penalties with correct recompute
+### 5.9 — Impose penalties with correct recompute
 
 **As the** Contest Director, **I want** to impose point penalties (up to
 disqualification) for infringements, dangerous flying, cheating or unsporting
@@ -244,8 +306,8 @@ rules require.
   retained** even though its round is discarded
   ([00-general-rules §5](../requirements/rules/00-general-rules.md)) — e.g. F5J
   drops the lowest round beyond 4, F3K beyond 6, F5K beyond 7, F5L beyond 5, F3B
-  discards the lowest partial per task beyond 5, and **F3J qualifying drops
-  nothing** (per the per-class docs).
+  discards the lowest partial per task beyond 5, and **F3J drops the lowest
+  round beyond 7** (per the per-class docs).
 - [ ] Given penalties that would take a competitor's total **below zero**, when
   the result computes, then the total is recorded as **zero** and the penalties
   still stand ([00-general-rules §6](../requirements/rules/00-general-rules.md)).
@@ -254,7 +316,7 @@ rules require.
 - [ ] Given any penalty I impose or revoke, when it is applied, then it is
   **attributable** to me and results recompute immediately and consistently.
 
-**Traces to:** area 5 (penalties) · users.md §2 Contest Director
+**Traces to:** area 5.9 · users.md §2 Contest Director
 **Notes:** Penalties are the **Director's** ruling, distinct from the Organiser
 correcting a captured task metric
 ([5.4](01-organiser.md#54--review-and-correct-scores-by-pilot)). It is also
@@ -340,7 +402,9 @@ zero). Resolution reuses the Director's existing tools — the readiness move (5
 and retirement (5.5); the only automatic step is the **end-of-round conversion to
 zero** when no groups remain. Marking *cannot make the group* is the
 [Scorer's](03-scorer.md) device action; the CD's authority creates a no-score only
-via the [prep-gate override](#65--run-control-authority-over-a-running-group).
+via the **"pilot unconfirmed"** form of the
+[prep-gate release](#65--run-control-authority-over-a-running-group) — the
+**"device offline"** form applies no no-score.
 
 ---
 
@@ -374,8 +438,18 @@ landing-window durations.
 - [ ] Given the prep **confirmation gate** has paused the countdown at one minute
   because not every Scorer has confirmed their pilot
   ([5.0.4](03-scorer.md#504--pre-group-confirmation-guard-blocks-entry-until-re-confirmed)),
-  when I **override** it, then the group proceeds and any **still-unconfirmed
-  pilot takes a no-score** ([5.7](#57--resolve-a-no-scored-did-not-fly-pilot)).
+  when the blocking device is shown as **offline** (its sync-state indicator on
+  the Base Station group view) and I release the gate as **"device offline"**,
+  then the group proceeds with **no no-score** — the device's buffered
+  confirmation reconciles when it syncs
+  ([scorer-device.md §4](../requirements/scorer-device.md#4-prep-gate-vs-an-offline-device-a1)).
+- [ ] Given the gate is held because a pilot genuinely is **not confirmed**
+  (device online, no confirmation), when I release the gate as **"pilot
+  unconfirmed"**, then the group proceeds and that pilot takes a **no-score**
+  ([5.7](#57--resolve-a-no-scored-did-not-fly-pilot)).
+- [ ] Given either release form, when I choose it, then the two are **distinct
+  actions** — the system never converts a comms fault into a no-score on its
+  own, and my choice is recorded (which form, which pilots/devices).
 - [ ] Given a range hold or other disruption mid-working-time, when I **abort the
   group**, then it **restarts from preparation** and any times/metrics already
   captured for that group are **annulled**.
@@ -443,8 +517,9 @@ distribution mechanism.
 Every Contest Director task in
 [`users.md §2`](../requirements/users.md#2-contest-director) is covered:
 
+- Authorise mid-contest configuration changes (Area 3) → **3 (mid-contest)**
 - Validate the draw's fairness and accept or re-draw (4.3) → **4.3**
-- Impose penalties for infringements (Area 5 penalties) → **5 (penalties)**
+- Impose penalties for infringements (5.9) → **5.9**
 - Approve re-flights and group changes (5.3) → **5.3 (approve re-flights)**
 - Move a pilot between groups for readiness — no re-draw (5.3) → **5.3
   (readiness move)**
@@ -494,12 +569,12 @@ change and is flagged for per-discipline work.
    [5.5](#55--retire-and-reinstate-pilots-re-drawing-remaining-rounds) is written
    to this.
 
-4. **Disqualification vs point penalty (Area 5 penalties) — no change needed,
+4. **Disqualification vs point penalty (5.9) — no change needed,
    flagged.** [00-general-rules §6](../requirements/rules/00-general-rules.md) lets
    the Director impose penalties **up to disqualification**. Point penalties have a
    clear recompute (deduct from aggregate, floor at zero, survive the drop); a
    **disqualification** is a different kind of outcome (removal from
-   classification, not a deduction). Story 5 (penalties) covers both but keeps
+   classification, not a deduction). Story 5.9 covers both but keeps
    disqualification distinct; the precise disqualification placement in the final
    classification is left to per-discipline detail rather than resolved here.
 </content>
