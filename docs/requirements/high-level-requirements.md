@@ -65,6 +65,7 @@ Everything that defines how a specific competition scores and runs.
 | 3.5 Draw Options | Configure fairness constraints for the draw: helper assignment, lane allocation. |
 | 3.6 Scoring Options | Configure result computation: group-score basis, rounding/precision, and discard (drop-worst) rules. |
 | 3.7 Task Scoring Rules | Configure per-task parameters generically — target times (incl. per-round overrides), timing precision, points-per-second, landing-bonus table, penalty/deduction types, timekeeper count. *Discipline-specific tasks and special rules are deferred to per-discipline requirements.* |
+| 3.8 Field-Aid & Timing Options | Configure the on-field running of groups: **preparation-time** duration, **landing-window** duration, and **inter-group gap** (all per-competition; preparation must respect any class minimum — e.g. F5K prep ≥ 5 min), plus which optional in-working-time reminder callouts are enabled. Working-time durations come from the per-task rules ([3.7](#area-3--competition-setup--configuration)). Consumed by [Area 6](#area-6--display-timer--audio-field-aids). |
 
 ---
 
@@ -89,32 +90,53 @@ Score capture is **device-based and concurrent**: one Scorer per competitor, eac
 on their own device, recording that pilot's metrics live into the shared contest
 management system (1 device → 1 Scorer → 1 competitor). Several Scorers therefore
 capture in parallel within a group. Pilots do **not** score themselves (conflict
-of interest). See [users.md](users.md).
+of interest). See [users.md](users.md). Each device also **mirrors the group's
+live field-aid state** — round, group, current phase (prep / working / landing)
+and countdown — driven from the Base Station's shared clock ([Area 6](#area-6--display-timer--audio-field-aids)).
+
+**Round completeness & the Scorer correction window.** A round is **complete**
+only when every group in it has all its scores captured. The **next round cannot
+start until the current round is complete** — this both prevents a stranded
+capture and *bounds score edits*: a Scorer may correct a value they captured **up
+to the start of the next round**, after which a change becomes mid-contest score
+administration ([5.3](#area-5--scoring)/[5.4](#area-5--scoring)). Operating the
+advance — confirming completeness and starting the next round — belongs to the
+**Announcer / Timekeeper** ([6.4](#area-6--display-timer--audio-field-aids)); see
+[users.md §4](users.md#4-announcer--timekeeper-field-aid-operator).
 
 | Sub-area | Description |
 |---|---|
-| 5.0 Device Assignment | The Scorer selects, from the group's pilot list on the device, the competitor they are scoring so entries attribute correctly; the device shows the selected pilot for pre-group confirmation (Scorer's responsibility, pilot cross-checks); supports re-selecting the pilot between consecutive groups without swapping devices. **Pre-group confirmation guard:** the device blocks score entry for a group until its pilot has been deliberately (re-)confirmed for that group, so a stale selection carried over from the previous group cannot silently capture scores. |
+| 5.0 Device Assignment | The Scorer selects, from the group's pilot list on the device, the competitor they are scoring so entries attribute correctly; the device shows the selected pilot for pre-group confirmation (Scorer's responsibility, pilot cross-checks); supports re-selecting the pilot between consecutive groups without swapping devices. **Pre-group confirmation guard:** the device blocks score entry for a group until its pilot has been deliberately (re-)confirmed for that group, so a stale selection carried over from the previous group cannot silently capture scores. **Prep-gate link:** this per-group confirmation also gates the group's start — the preparation countdown pauses at one minute remaining until every Scorer in the group has confirmed ([6.5](#area-6--display-timer--audio-field-aids)); a Scorer may instead mark their pilot **cannot make the group**, yielding a **no-score** ([5.7](#area-5--scoring)) so the group can proceed. |
 | 5.1 Score Entry | Each Scorer captures the adjacent competitor's flight result live, with immediate confirmation against the right competitor; supports many Scorers capturing concurrently within a group. |
 | 5.2 Task Scoring Screens | Capture the inputs each task requires (times, landings, laps, heights, motor runs, penalties). *Discipline-specific layouts deferred to per-discipline requirements.* |
 | 5.3 Re-Flights & Group Management | Move pilots between groups, re-fly, create, or split groups, with clash checks. A **pilot-readiness group move** reassigns a pilot to another group **without regenerating the draw** — it does not invoke the [Area 4](#area-4--draw--rounds-generation) anti-repeat matrix and leaves all other pilots' groupings untouched (contrast [5.5 Pilot Retirement](#area-5--scoring), which *does* re-draw remaining rounds). **Lone-pilot safeguard:** no group may score with a single competitor — if one would, and the draw could not avoid it ([4.2](#area-4--draw--rounds-generation)), insert a **randomly-chosen dummy** from the other pilots for the lone pilot to be normalised against, so they are not auto-awarded the group winner's 1000 ([general-rules §3](rules/00-general-rules.md#3-group-score-normalisation)); the dummy's flight **does not count** toward that pilot's own score. Where a class rule dictates a different outcome — e.g. **F3B annuls a one-valid-result group** ([f3b.md](rules/f3b.md)) — the dummy is **not** applied automatically: the system **warns and requires the Contest Director's explicit approval, scoped to that one contest**, before proceeding. |
 | 5.4 Score by Pilot | Review/enter a single pilot's scores across all rounds. |
 | 5.5 Pilot Retirement | Retire a pilot and re-draw remaining rounds to exclude them; reinstate if needed. |
 | 5.6 Score Validation | Flag outlier/missing scores against configurable limits, per pilot or overall. |
+| 5.7 No-Score Resolution | Handle a competitor who did **not fly** their group — a Scorer marked *cannot make the group* ([5.0](#area-5--scoring)), or the [Contest Director overrode the prep gate](#area-6--display-timer--audio-field-aids) ([6.5](#area-6--display-timer--audio-field-aids)). A **no-score** is distinct from a **zero**: it means *did not fly*, not *flew and scored zero*. The pilot is expected to still fly the round via a [pilot-readiness group move](#area-5--scoring) ([5.3](#area-5--scoring)) into a later group; a no-score **auto-converts to a zero at round end** only if no groups remain in the round for them to fly. An unresolved no-score is an outstanding item against **round completeness** — the round cannot advance ([6.4](#area-6--display-timer--audio-field-aids)) while a no-scored pilot could still be moved into a remaining group. |
 
 ---
 
 ## Area 6 — Display, Timer & Audio (field aids)
 
-On-field running of flight groups.
+On-field running of flight groups. The field always has a **large, bright
+timer/display board** visible to everyone and a **loudspeaker set**, both
+connected to and driven by the Base Station. The MVP assumes a **single flight
+line** — one board, one speaker set, one group flying at a time.
+
+Each flight group runs an **automatic phased sequence**: announce the round and
+group → announce the group's pilots → **preparation time** → **working time** →
+**landing window** → a short **inter-group gap** before the next group. The Base
+Station drives the board, the speakers, and the Scorer devices ([Area 5](#area-5--scoring))
+from **one shared clock** so they cannot drift apart.
 
 | Sub-area | Description |
 |---|---|
-| 6.1 Timer | Countdown/working-time timer for the current flight group. |
-| 6.2 Audio | Spoken/audible callouts and announcements tied to the timer. |
-| 6.3 Field Display | On-screen display of the current group and flying order. |
-
-> ⚠️ **Stub** — sub-areas are inferred; confirm against the reference
-> `Display` material before writing stories.
+| 6.1 Timer & Phases | Drive the group's phased countdown — **preparation**, **working time**, **landing window** — from one shared clock. Preparation and landing-window durations are per-competition ([3.8](#area-3--competition-setup--configuration)); working time is per-task ([3.7](#area-3--competition-setup--configuration)) and may differ round to round. Phases advance **automatically**: prep flows into working time, working time into the landing window. For classes whose rules require it, the **end of working time stops all flight-time timing** ([general-rules §2](rules/00-general-rules.md#2-data-the-timer--helper-collects)). |
+| 6.2 Audio | Spoken/audible callouts on the shared clock: announce **round and group**, then the group's **pilots** (flying order, name and start number) so each pilot knows if they are in this group; announce the start of **preparation**; during **working time** announce remaining time **each minute on the minute**, then **every second from −30 s to zero**, then a **loud horn** at end of working time; announce the **landing window** at its start and the **all-down** at its end. Optional additional in-working-time reminders are configurable ([3.8](#area-3--competition-setup--configuration)). Pilot names are voiced by **text-to-speech, English only** in the MVP. |
+| 6.3 Field Display Board | Big, glanceable, daylight-readable board showing the **current round and group**, the **current phase** (prep / working / landing) and the **remaining time** of that phase. (Pilot names / flying order are announced by audio, not shown on the board.) |
+| 6.4 Round Progression | Advance the contest to the next round/group. **Gated by score completeness:** the next round cannot be started until every group in the previous round has all its scores captured (see [Area 5](#area-5--scoring)), which bounds the Scorer correction window; an unresolved [no-score](#area-5--scoring) ([5.7](#area-5--scoring)) is likewise an outstanding item that blocks the advance. Operated by the Announcer/Timekeeper. |
+| 6.5 Group Run Control | Start, hold and adjust a running group. Groups start automatically after the previous group's landing window plus the **inter-group gap** ([3.8](#area-3--competition-setup--configuration)); the **Contest Director** may **pause/resume** the preparation phase and the inter-group progression (but **not** working time or the landing window). During preparation the Director may **fast-forward** (−1 minute per invocation, never below one minute remaining) or **add time** (+1 minute per invocation). **Prep confirmation gate:** the preparation countdown pauses at one minute remaining until every Scorer in the group has confirmed their pilot ([5.0](#area-5--scoring)); the Director may **override** the gate, and any still-unconfirmed pilots take a **no-score** ([5.7](#area-5--scoring)). Working time and the landing window cannot be paused, but the Director may **abort the whole group** (e.g. a range hold) and **restart it from preparation**, annulling any times/metrics accumulated for that group. |
 
 ---
 
@@ -195,7 +217,10 @@ areas above when scoped.
 
 ## Notes for future work
 
-- **Display/Timer/Audio (Area 6)** is unconfirmed — verify before writing stories.
+- **Display/Timer/Audio (Area 6)** is **confirmed and in MVP scope** — field board
+  + loudspeakers, an automatic phased group sequence (prep → working → landing →
+  inter-group gap), and Contest-Director run control. The earlier "unconfirmed
+  stub" status is resolved.
 - **Task scoring (3.7 / 5.2)** is intentionally generic; the bulk of detail lives
   in the deferred **per-discipline** requirements — flesh those out one
   discipline at a time.

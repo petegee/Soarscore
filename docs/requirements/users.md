@@ -22,8 +22,8 @@ results on their own devices, and sync between devices) remains a
 | User | Software role | Interaction | Primary areas |
 |---|---|---|---|
 | Organiser | Administrator / setup | Direct, hands-on | 1, 2.1, 3, 4.1, 4.2, 4.4, 5.3, 5.4, 5.6, 7 |
-| Contest Director | Officiating authority | Direct, decisions | 2.2, 4.3, 5.3, 5.5, penalties, 7 |
-| Scorer | Per-competitor field recorder | Direct, device-based, one per pilot | 5.0, 5.1, 5.2 |
+| Contest Director | Officiating authority | Direct, decisions | 2.2, 4.3, 5.3, 5.5, 5.7, penalties, 6.5, 7 |
+| Scorer | Per-competitor field recorder | Direct, device-based, one per pilot | 5.0, 5.1, 5.2, 5.7 *(reads 6 on device)* |
 | Announcer / Timekeeper | Field-aid operator | Direct, on-field | 6 |
 | Pilot / Competitor | Subject & results consumer | Indirect | 3.4, 5, 7 |
 
@@ -94,6 +94,7 @@ result. Highest privilege; often the same person as the Organiser in practice.
 | Move a pilot from one group to another for pilot readiness (does **not** change the draw) | [5.3](high-level-requirements.md#area-5--scoring) |
 | Approve the per-contest override to insert a dummy where a class rule would annul a lone-pilot group instead (e.g. F3B) | [5.3](high-level-requirements.md#area-5--scoring) |
 | Retire and reinstate pilots | [5.5](high-level-requirements.md#area-5--scoring) |
+| Exercise run-control authority over a running group — pause/resume preparation and the inter-group gap, fast-forward or add preparation time, override the prep confirmation gate (unconfirmed pilots take a no-score), and abort/restart a group | [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids), [5.7](high-level-requirements.md#area-5--scoring) |
 | Lock the competition against further changes | [2.2](high-level-requirements.md#area-2--competition-lifecycle) |
 | Publish official results | [7](high-level-requirements.md#area-7--reports) |
 
@@ -121,6 +122,10 @@ pilot's shoulder.
   must let them **re-select the pilot** rather than requiring a different handset.
 - Input laid out to **match the shape of the task**, so entry follows the natural
   order of what the pilot did.
+- **See the group's live clock on their own device** — the device mirrors the
+  round, group, current phase (prep / working / landing) and countdown from the
+  Base Station, so the Scorer follows the group's timing without looking away to
+  the field board ([Area 6](high-level-requirements.md#area-6--display-timer--audio-field-aids)).
 
 **Tasks**
 
@@ -129,6 +134,7 @@ pilot's shoulder.
 | Select the competitor to score from the group's pilot list on the device, and confirm before the group starts | [5.0](high-level-requirements.md#area-5--scoring) |
 | Record the adjacent competitor's flight result on a device, live | [5.1](high-level-requirements.md#area-5--scoring) |
 | Capture task-specific inputs (times, landings, laps, heights, motor runs, penalties) | [5.2](high-level-requirements.md#area-5--scoring) |
+| Mark that the adjacent pilot **cannot make the group** — yielding a no-score — so the group can proceed | [5.0](high-level-requirements.md#area-5--scoring), [5.7](high-level-requirements.md#area-5--scoring) |
 
 > **Device–competitor binding (MVP).** It is the **Scorer's responsibility** to
 > ensure their device is set to the correct pilot — selected from the group's pilot
@@ -148,15 +154,22 @@ pilot's shoulder.
 
 ### 4. Announcer / Timekeeper (field-aid operator)
 
-The person at the flight line who runs each group: starts the working-time timer,
-triggers the audio callouts, and drives the on-field display of who is flying.
-Operates **Area 6** in real time while a group is in the air.
+The person at the flight line who runs each group: starts the group and drives
+its **automatic phased sequence** (preparation → working time → landing window)
+on the shared clock, with the audio callouts and the field board that go with it.
+Operates **Area 6** in real time while a group is in the air, and **advances the
+contest from one round to the next** once the previous round's scores are all in.
+The **Contest Director** holds the run-control *authority* actions within a group
+— pausing/fast-forwarding preparation, overriding the prep confirmation gate,
+aborting a group ([6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids));
+at a small contest one person may hold both roles.
 
 > **Naming caution.** This "Timekeeper" *operates the group clock and callouts for
 > the whole group*. It is **not** the per-competitor [Scorer](#3-scorer), of whom
 > there is one beside each pilot recording that pilot's flight metrics. One
-> Announcer/Timekeeper runs the group; many Scorers record within it. Confirm this
-> split when [Area 6 is verified](high-level-requirements.md#notes-for-future-work).
+> Announcer/Timekeeper runs the group; many Scorers record within it. This split
+> is **confirmed under Area 6** and the role name is kept as-is; the two remain
+> deliberately distinct.
 
 **Key needs**
 - A **big, glanceable** display and timer readable from the flight line, in
@@ -169,9 +182,11 @@ Operates **Area 6** in real time while a group is in the air.
 
 | Task | Area |
 |---|---|
-| Run the countdown / working-time timer for the current group | [6.1](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
-| Trigger spoken/audible callouts tied to the timer | [6.2](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
-| Display the current group and flying order on-field | [6.3](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
+| Run the group's automatic phased timer — preparation, working time, landing window — on the shared clock | [6.1](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
+| Drive the audio callouts tied to the clock — round/group and pilot announcements, per-minute and final-30 s working-time calls, the end-of-working-time horn, and the landing / all-down calls | [6.2](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
+| Show the current round, group and phase countdown on the field board | [6.3](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
+| Start groups and hold/adjust progression between them (Contest-Director authority over prep pause / fast-forward / add-time, gate override and abort) | [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
+| Advance to the next round only once the previous round's scores are all in (gates the [Scorer's](#3-scorer) correction window) | [6.4](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
 
 ---
 
@@ -189,6 +204,10 @@ interest), so they remain an indirect user by design.
 
 **Key needs**
 - To know **when and in which group** they fly, and in which lane.
+- To **hear the group and pilot-name announcements** and read the field board
+  (round, group, current phase, remaining time), so they know whether they are in
+  the current group and how the working time is running
+  ([Area 6](high-level-requirements.md#area-6--display-timer--audio-field-aids)).
 - **Assurance their flight is being recorded against them** — the ability to
   cross-check, before the group begins, that the Scorer's device is set to their
   name.
@@ -203,6 +222,7 @@ interest), so they remain an indirect user by design.
 |---|---|
 | Provide/confirm entry details (e.g. class, start number) via the roster | [3.4](high-level-requirements.md#area-3--competition-setup--configuration) |
 | Cross-check the Scorer's device is set to their name before the group begins | [5.0](high-level-requirements.md#area-5--scoring) |
+| Hear the round / group / pilot announcements and read the field board to know when they fly | [6.2](high-level-requirements.md#area-6--display-timer--audio-field-aids), [6.3](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
 | Fly; result entered on their behalf by the Scorer | [5.2](high-level-requirements.md#area-5--scoring) |
 | Read the draw, flying order and results | [7.1](high-level-requirements.md#area-7--reports), [7.3](high-level-requirements.md#area-7--reports), [7.4](high-level-requirements.md#area-7--reports) |
 
@@ -220,8 +240,11 @@ Not needed for a basic contest; captured so the roles are not lost.
 
 ## Notes for future work
 
-- **Announcer vs. per-pilot timekeeper** — the two "timekeeper" meanings must be
-  reconciled when [Area 6 is confirmed](high-level-requirements.md#notes-for-future-work).
+- **Announcer vs. per-pilot timekeeper — resolved.** With Area 6 confirmed, the
+  two roles are kept **deliberately distinct**: the **Announcer / Timekeeper** runs
+  the *group* clock, callouts and board (one per group); the **Scorer** records one
+  pilot's metrics (one per flying pilot). The role name is retained; the "one runs
+  the group, many record within it" split stands.
 - **Pilots do not self-score** — a conflict of interest — so the Pilot stays an
   *indirect* user even as scoring goes electronic. Any future *remote* scoring is
   for officials (e.g. off-site Scorers), not for pilots recording their own

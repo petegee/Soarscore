@@ -67,8 +67,10 @@ The FAI PDFs (source-docs) remain the ultimate authority.
 - Prose is wrapped at ~80 columns. Match the existing markdown style.
 - When fleshing out a discipline, do it **one class at a time**; put shared
   material in the general/family doc and only the delta in the per-class doc.
-- **Area 6 (Display/Timer/Audio)** is an unconfirmed stub — verify before
-  building on it.
+- **Area 6 (Display/Timer/Audio)** is **confirmed and in MVP scope**: a bright
+  field board + loudspeakers, driven by the Base Station from one shared clock,
+  running an automatic phased group sequence (prep → working → landing →
+  inter-group gap) with Contest-Director run control.
 
 ## House-keeping rules
 

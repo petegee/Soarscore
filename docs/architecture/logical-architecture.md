@@ -9,8 +9,9 @@ it serves.
 ## The shape in one line
 
 One **Base Station** runs the competition; **N Scorer Devices** capture live
-results against it two-way, one Scorer per flying competitor; **users** interact
-according to their [role](../requirements/users.md).
+results against it two-way, one Scorer per flying competitor; a **bright field
+board and loudspeakers** plus each Scorer device follow the group's shared clock;
+**users** interact according to their [role](../requirements/users.md).
 
 ## Diagram
 
@@ -37,7 +38,7 @@ flowchart TB
     %% ---- Systems ----
     BASE["🖥️ Base Station<br/><b>Competition Management Software</b><br/>master data · setup · draw · scoring · results"]
 
-    FIELD["📺 Field Aids<br/>display · timer · audio<br/><i>(Area 6 — unconfirmed stub)</i>"]
+    FIELD["📺 Field Aids<br/><b>bright board + loudspeakers</b><br/>round · group · phase · countdown · callouts<br/><i>(Area 6)</i>"]
 
     subgraph Devices["N Scorer Devices — score capture, one per Scorer"]
         direction LR
@@ -47,23 +48,23 @@ flowchart TB
     end
 
     %% ---- Two-way base <-> device link ----
-    BASE -- "pilot · group · round · working time" --> D1
+    BASE -- "pilot · group · round · phase · working time · countdown" --> D1
     D1   -- "task results / metrics" --> BASE
-    BASE -- "pilot · group · round · working time" --> D2
+    BASE -- "pilot · group · round · phase · working time · countdown" --> D2
     D2   -- "task results / metrics" --> BASE
-    BASE -- "pilot · group · round · working time" --> Dn
+    BASE -- "pilot · group · round · phase · working time · countdown" --> Dn
     Dn   -- "task results / metrics" --> BASE
 
     %% ---- Users to systems ----
     ORG   -- "configure, draw, administer scores, report" --> BASE
-    CD    -- "penalties, re-flights, retirements, lock &amp; publish" --> BASE
-    ANN   -- "run timer, callouts, flying-order display" --> FIELD
+    CD    -- "penalties, re-flights, retirements, run-control, lock &amp; publish" --> BASE
+    ANN   -- "run phased timer, callouts, board; start/advance groups" --> FIELD
     SC1   -- "select pilot · record flight" --> D1
     SC2   -- "select pilot · record flight" --> D2
     SCn   -- "select pilot · record flight" --> Dn
 
     %% ---- Field aids driven by the base station ----
-    BASE -- "current group · flying order · time" --> FIELD
+    BASE -- "round · group · phase · shared clock" --> FIELD
 
     %% ---- Pilot: indirect ----
     BASE -. "published draw &amp; results" .-> PILOT
@@ -72,12 +73,12 @@ flowchart TB
     classDef system fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1;
     classDef device fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px,color:#1b5e20;
     classDef person fill:#fff3e0,stroke:#e65100,stroke-width:1px,color:#e65100;
-    classDef stub fill:#f5f5f5,stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 3,color:#616161;
+    classDef fieldaid fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c;
 
     class BASE system;
     class D1,D2,Dn device;
     class ORG,CD,ANN,SC1,SC2,SCn,PILOT person;
-    class FIELD stub;
+    class FIELD fieldaid;
 ```
 
 ## What the diagram says
@@ -88,7 +89,8 @@ flowchart TB
 - **N Scorer Devices** — one per Scorer, capturing live during a group's working
   time. The **base↔device link is two-way**:
   - **down** (base → device): the pilot, group, round and working-time context the
-    device needs to present the right entry;
+    device needs to present the right entry — plus the live **phase and countdown**
+    it mirrors from the field-aid clock ([Area 6](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids));
   - **up** (device → base): the competitor's task results / metrics (times,
     landings, laps, heights, motor runs, penalties).
 - **Users**, attached by [role](../requirements/users.md):
@@ -96,7 +98,11 @@ flowchart TB
     administrative setup vs. officiating authority.
   - Each **Scorer** operates **one Scorer Device**, recording the adjacent pilot.
     Several work in parallel within a group.
-  - The **Announcer / Timekeeper** operates the **Field Aids** (Area 6).
+  - The **Announcer / Timekeeper** operates the **Field Aids** (Area 6) — the
+    bright board and loudspeakers — running each group's automatic phased sequence
+    (prep → working → landing) and advancing rounds. The **Contest Director** holds
+    the run-control authority actions (prep pause / fast-forward, gate override,
+    abort) via the Base Station.
   - The **Pilot** is **indirect**: reads the published draw and results, and
     cross-checks (before the group starts) that a Scorer's device is set to their
     name — but never self-scores.
@@ -107,9 +113,10 @@ flowchart TB
   about transport, topology or sync strategy. The MVP assumes Scorers capture live
   into the shared system; *remote* scoring and device-to-device sync are
   [future enhancements](../requirements/high-level-requirements.md#future-enhancements).
-- **Field Aids (Area 6) are an unconfirmed stub** per `CLAUDE.md` — shown dashed;
-  verify before building on them. The Announcer/Timekeeper here is the
-  *group-level* operator, **not** the per-competitor Scorer (see the
+- **Field Aids (Area 6) are confirmed and in MVP scope** — a bright board and
+  loudspeakers, always present and driven by the Base Station from one shared
+  clock. The Announcer/Timekeeper here is the *group-level* operator, **not** the
+  per-competitor Scorer (see the
   [naming caution](../requirements/users.md#4-announcer--timekeeper-field-aid-operator)).
 - **One person, several hats** — Organiser, Contest Director and Announcer may be
   the same individual at a small contest; the **Scorer** role cannot be merged,
