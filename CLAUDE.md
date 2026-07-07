@@ -22,11 +22,19 @@ build/test commands, and conventions.
 ## Repository map
 
 ```
+docs/architecture/
+  logical-architecture.md      Logical view: parts, links, roles.
+  physical-architecture.md     Deployment view: headless Base Station (authoritative),
+                               scorer fleet, wired board+speakers, companion-app
+                               laptop, optional pilot-phone results page.
 docs/requirements/
   high-level-requirements.md   Areas 1–7 (epics/features). The backbone index.
   users.md                     Roles, needs, tasks; cross-refs the areas.
-  decisions.md                 Recorded cross-cutting decisions (D1–D7). Settled;
+  decisions.md                 Recorded cross-cutting decisions (D1–D8). Settled;
                                don't re-litigate per session.
+  scorer-device.md             Scorer handheld requirements (capture model,
+                               on-device/base split, sync, fleet). Draft with
+                               OPEN questions.
   rules/                        Scoring/running rules the software must enforce
     00-general-rules.md         Cross-class rules (draw, timing, scoring, penalties)
     f3-general-rules.md         F3 family shared rules

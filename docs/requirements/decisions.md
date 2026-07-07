@@ -102,3 +102,22 @@ of day / resume next day is MVP scope**
 ([2.3](high-level-requirements.md#area-2--competition-lifecycle)). These
 bounds size everything: device fleet ≈ max group size plus spares, report
 volumes are small, draw computation is trivial at this scale.
+
+## D8 — Physical shape: headless authoritative base, companion laptop
+
+*(Decided 2026-07-08.)* The Base Station is a **headless embedded controller
+at the flight line** that owns all contest state, the event log (D4), the
+shared clock and the radio; the **field board and loudspeakers are wired to
+it** (so the horn — the timing authority, D5 — can never be stale); the
+**master laptop runs a companion app as a detachable client** holding no
+state; **pilots' phones** may read an **MVP-optional, strictly read-only
+draw/standings web page** served by the base over local Wi-Fi — no native
+app. Full detail and implications:
+[physical architecture](../architecture/physical-architecture.md).
+
+**Consequences**
+- A running group survives the laptop leaving, sleeping or failing; but
+  run-control and round advance need a connected operator client.
+- Pilot-phone and laptop traffic must not be able to degrade the
+  scorer-device link.
+- The base is a deliberate single point of failure — D3 is the answer.

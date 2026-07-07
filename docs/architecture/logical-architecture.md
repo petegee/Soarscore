@@ -4,7 +4,8 @@ A logical (not deployment) view of the system: **what the parts are and how they
 talk**, independent of any specific technology, framework or wire protocol.
 It complements the [requirements](../requirements/high-level-requirements.md) and
 [users](../requirements/users.md) — see those for *what* each part does and *who*
-it serves.
+it serves. For the deployment view — which physical boxes exist and how they
+are wired — see the [physical architecture](physical-architecture.md).
 
 ## The shape in one line
 
