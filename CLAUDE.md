@@ -25,6 +25,8 @@ build/test commands, and conventions.
 docs/requirements/
   high-level-requirements.md   Areas 1–7 (epics/features). The backbone index.
   users.md                     Roles, needs, tasks; cross-refs the areas.
+  decisions.md                 Recorded cross-cutting decisions (D1–D7). Settled;
+                               don't re-litigate per session.
   rules/                        Scoring/running rules the software must enforce
     00-general-rules.md         Cross-class rules (draw, timing, scoring, penalties)
     f3-general-rules.md         F3 family shared rules
@@ -56,6 +58,22 @@ The FAI PDFs (source-docs) remain the ultimate authority.
   for speed tasks). **F3B is the exception** — three tasks normalised separately.
 - **Final:** sum of round scores, with class-specific **drop-worst**; penalties
   deducted from the final aggregate and retained even if their round is dropped.
+
+## Key constraints (recorded in docs/requirements/decisions.md)
+
+- **Trust model:** club-level tool for a small, trusted NZ group. No auth, no
+  score sign-off; an **immutable event log of all mutations** provides
+  auditability instead.
+- **Scorer devices:** dedicated **ESP32 stopwatch-style handhelds** with custom
+  firmware — the device *is* the stopwatch. No BYOD.
+- **Offline-first:** runs entirely without internet; devices buffer captures and
+  sync on reconnect; publish results only when connectivity exists.
+- **Failure policy:** any system failure → **pen and paper**, manual entry at
+  the Base Station afterwards; the CD validates/overrides scores before Lock.
+- **Timing:** end of working time does **not** auto-stop device stopwatches —
+  the Scorer stops on the horn; over-working-time captures are flagged.
+- **Scale:** ≤ 20 pilots, ≤ 8 rounds/day, 1–2 day events; overnight
+  suspend/resume is MVP.
 
 ## Working conventions
 

@@ -103,14 +103,19 @@ result. Highest privilege; often the same person as the Organiser in practice.
 **One Scorer per competitor**, not a single central operator. During a group's
 working time each flying pilot has a Scorer standing beside them who records that
 pilot's task metrics on a device — times, landings, laps, heights, motor runs,
-penalties. Each entry is recorded **automatically against that competitor** in the
+penalties. The device is a **dedicated stopwatch-style handheld** and **is the
+Scorer's stopwatch** — flight timing happens on the device itself
+([decisions.md D2](decisions.md#d2--scorer-device-dedicated-esp32-stopwatch-style-handheld)). Each entry is recorded **automatically against that competitor** in the
 contest management system, so there are no paper cards and no later transcription.
 A group in the air therefore has several Scorers working in parallel, one at each
 pilot's shoulder.
 
 **Key needs**
 - **Eyes on the flight, not the screen** — capture must work while watching the
-  model and the pilot: large touch targets, minimal keystrokes, sensible defaults.
+  model and the pilot. The device is a stopwatch-style handheld
+  ([decisions.md D2](decisions.md#d2--scorer-device-dedicated-esp32-stopwatch-style-handheld)),
+  so this means **no-look, stopwatch-grade operation**: a physical start/stop
+  control, minimal interactions, sensible defaults — not a phone-style touch UI.
 - **Scoped to one competitor and task** — the Scorer only ever records for the
   pilot beside them, in the current group; no hunting for the right entry.
 - **Immediate confirmation** the metric was captured **against the right

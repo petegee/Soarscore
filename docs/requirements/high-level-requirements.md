@@ -26,6 +26,13 @@ Station running the competition management software, N Scorer Devices capturing
 live, and each user attached by role — see the
 [logical high-level architecture](../architecture/logical-architecture.md).
 
+**System constraints.** Cross-cutting decisions that frame every area — the
+club-level trust model (no auth, no sign-off), dedicated ESP32 stopwatch-style
+Scorer devices, offline-first operation with device buffer-and-sync, the
+pen-and-paper failure fallback, the immutable event log, and the scale bounds
+(≤ 20 pilots, ≤ 8 rounds/day, 1–2 days) — are recorded in
+[decisions.md](decisions.md).
+
 ---
 
 ## Area 1 — Master Data Management
@@ -48,7 +55,8 @@ Managing whole competitions as objects.
 | Sub-area | Description |
 |---|---|
 | 2.1 Create / Open / Delete | Basic lifecycle actions over competitions. |
-| 2.2 Lock | Freeze a competition against further changes while keeping reports available. |
+| 2.2 Lock | Freeze a competition against further changes while keeping reports available. **Preceded by the Contest Director's end-of-contest validation pass** ([decisions.md D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)): review flagged anomalies ([5.6](#area-5--scoring)), enter missing scores and override known-incorrect ones via manual entry ([5.8](#area-5--scoring)), then lock. |
+| 2.3 Suspend / Resume | Suspend a competition at end of day and resume the next day — two-day events are routine ([decisions.md D7](decisions.md#d7--scale-bounds-and-multi-day-operation)). Contest state (completed rounds, scores, draw position, round-in-progress status) carries over intact. |
 
 ---
 
@@ -114,6 +122,7 @@ advance — confirming completeness and starting the next round — belongs to t
 | 5.5 Pilot Retirement | Retire a pilot and re-draw remaining rounds to exclude them; reinstate if needed. |
 | 5.6 Score Validation | Flag outlier/missing scores against configurable limits, per pilot or overall. |
 | 5.7 No-Score Resolution | Handle a competitor who did **not fly** their group — a Scorer marked *cannot make the group* ([5.0](#area-5--scoring)), or the [Contest Director overrode the prep gate](#area-6--display-timer--audio-field-aids) ([6.5](#area-6--display-timer--audio-field-aids)). A **no-score** is distinct from a **zero**: it means *did not fly*, not *flew and scored zero*. The pilot is expected to still fly the round via a [pilot-readiness group move](#area-5--scoring) ([5.3](#area-5--scoring)) into a later group; a no-score **auto-converts to a zero at round end** only if no groups remain in the round for them to fly. An unresolved no-score is an outstanding item against **round completeness** — the round cannot advance ([6.4](#area-6--display-timer--audio-field-aids)) while a no-scored pilot could still be moved into a remaining group. |
+| 5.8 Manual Entry & Paper Fallback | Base-station bulk score entry, per group and round, for any task type. This is the entry path when the field reverts to **pen and paper** after a device or system failure ([decisions.md D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)), and the mechanism for the Contest Director's end-of-contest corrections that gate Lock ([2.2](#area-2--competition-lifecycle)). Blank scoring sheets are printable **in advance** of any round ([7.3](#area-7--reports)) so the paper fallback is always ready. |
 
 ---
 
@@ -132,7 +141,7 @@ from **one shared clock** so they cannot drift apart.
 
 | Sub-area | Description |
 |---|---|
-| 6.1 Timer & Phases | Drive the group's phased countdown — **preparation**, **working time**, **landing window** — from one shared clock. Preparation and landing-window durations are per-competition ([3.8](#area-3--competition-setup--configuration)); working time is per-task ([3.7](#area-3--competition-setup--configuration)) and may differ round to round. Phases advance **automatically**: prep flows into working time, working time into the landing window. For classes whose rules require it, the **end of working time stops all flight-time timing** ([general-rules §2](rules/00-general-rules.md#2-data-the-timer--helper-collects)). |
+| 6.1 Timer & Phases | Drive the group's phased countdown — **preparation**, **working time**, **landing window** — from one shared clock. Preparation and landing-window durations are per-competition ([3.8](#area-3--competition-setup--configuration)); working time is per-task ([3.7](#area-3--competition-setup--configuration)) and may differ round to round. Phases advance **automatically**: prep flows into working time, working time into the landing window. The system does **not** stop the Scorer devices' flight timing at end of working time — the Scorer stops the watch on the **horn** ([6.2](#area-6--display-timer--audio-field-aids); [decisions.md D5](decisions.md#d5--end-of-working-time-does-not-stop-the-device-stopwatch)). Because class rules cap countable flight time at end of working time ([general-rules §2](rules/00-general-rules.md#2-data-the-timer--helper-collects)), the Base Station **flags any captured time exceeding the working time as an anomaly** for the Contest Director's validation pass ([2.2](#area-2--competition-lifecycle)). |
 | 6.2 Audio | Spoken/audible callouts on the shared clock: announce **round and group**, then the group's **pilots** (flying order, name and start number) so each pilot knows if they are in this group; announce the start of **preparation**; during **working time** announce remaining time **each minute on the minute**, then **every second from −30 s to zero**, then a **loud horn** at end of working time; announce the **landing window** at its start and the **all-down** at its end. Optional additional in-working-time reminders are configurable ([3.8](#area-3--competition-setup--configuration)). Pilot names are voiced by **text-to-speech, English only** in the MVP. |
 | 6.3 Field Display Board | Big, glanceable, daylight-readable board showing the **current round and group**, the **current phase** (prep / working / landing) and the **remaining time** of that phase. (Pilot names / flying order are announced by audio, not shown on the board.) |
 | 6.4 Round Progression | Advance the contest to the next round/group. **Gated by score completeness:** the next round cannot be started until every group in the previous round has all its scores captured (see [Area 5](#area-5--scoring)), which bounds the Scorer correction window; an unresolved [no-score](#area-5--scoring) ([5.7](#area-5--scoring)) is likewise an outstanding item that blocks the advance. Operated by the Announcer/Timekeeper. |
@@ -148,7 +157,7 @@ Turning competition data into printable output at any stage of the event.
 |---|---|
 | 7.1 Results Reports | Overall, positional, round-by-round, landing, and ranked results, with scope filters and round-range selection. |
 | 7.2 Custom Reports | Branded/customisable report layouts. |
-| 7.3 Draw Reports | Draw details in multiple layouts and sort orders; scoring sheets. |
+| 7.3 Draw Reports | Draw details in multiple layouts and sort orders; **blank scoring sheets, printable in advance of any round** — they double as the pen-and-paper fallback kit ([5.8](#area-5--scoring), [decisions.md D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)). |
 | 7.4 Score Cards & Records | Printable per-pilot score cards and records. |
 
 ---
@@ -205,6 +214,9 @@ areas above when scoped.
 **Reports & distribution**
 - Badges (identity and per-round matrix badges).
 - Output channels (PDF/CSV export, online publishing).
+- Live-scoring public web page — real-time contest progress when internet is
+  available (the system itself stays offline-first,
+  [decisions.md D6](decisions.md#d6--offline-first-buffer-and-sync-publish-when-connected)).
 - Email distribution of reports and links.
 
 **System & cross-cutting**

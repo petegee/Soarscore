@@ -113,6 +113,13 @@ flowchart TB
   about transport, topology or sync strategy. The MVP assumes Scorers capture live
   into the shared system; *remote* scoring and device-to-device sync are
   [future enhancements](../requirements/high-level-requirements.md#future-enhancements).
+- **Scorer Devices are dedicated hardware** — ESP32 stopwatch-style handhelds
+  running custom firmware; the device *is* the Scorer's stopwatch, and no other
+  device types are permitted. Devices are **offline-tolerant**: if the base link
+  drops they keep capturing and sync when it returns. The whole system is
+  **offline-first** — no internet required to run a contest; results publish when
+  connectivity exists. See
+  [decisions.md](../requirements/decisions.md) (D2, D6).
 - **Field Aids (Area 6) are confirmed and in MVP scope** — a bright board and
   loudspeakers, always present and driven by the Base Station from one shared
   clock. The Announcer/Timekeeper here is the *group-level* operator, **not** the
