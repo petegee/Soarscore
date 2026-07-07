@@ -211,6 +211,11 @@ areas above when scoped.
 - Remote / off-site scoring and sync scenarios beyond the on-site
   one-Scorer-per-competitor model.
 - Machine-readable / hardware-assisted score capture (e.g. automated timing).
+  First concrete case: the local F3B scene's **existing custom wireless
+  lap-count / speed-time system** (its own Raspberry-Pi base station) —
+  ultimately the Base Station ingests those metrics per pilot from it; in
+  the MVP its readouts are **manually cross-entered on the hand-held
+  devices** ([physical architecture §9](../architecture/physical-architecture.md#9-adjacent-system--the-local-f3b-lapspeed-timing-rig)).
 - *Pilots scoring their own flights is **out of scope** — a conflict of interest.*
 
 **Fly-offs & progressive draws** *(MVP is qualifying rounds only)*

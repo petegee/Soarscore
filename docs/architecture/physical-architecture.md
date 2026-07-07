@@ -226,6 +226,29 @@ job, on its own connection, when one exists (D6).
 | Laptop | own battery / field power | groups keep running; no run-control until a client returns; state safe on base |
 | Pilot phones | pilots' own | nothing — expendable by design |
 
+## 9. Adjacent system — the local F3B lap/speed timing rig
+
+The local F3B scene already operates **custom wireless hardware** that
+records **lap counts** (Task B distance) and **speed course times**
+(Task C), with its own **Raspberry-Pi base station**. It is a separate,
+pre-existing system — not part of Soarscore — but it produces exactly the
+per-pilot metrics the F3B rows of the
+[capture matrix](../requirements/scorer-device.md#per-class-capture-matrix)
+need.
+
+- **MVP: manual cross-entry.** The Scorer reads the lap count / course time
+  off that system and enters it on the hand-held like any other raw metric.
+  No link between the two base stations exists; the raw-capture principle is
+  unchanged — the Scorer transcribes an observation, the system interprets.
+- **Ultimately: base-to-base integration.** The Soarscore Base Station
+  ingests those metrics per pilot from the rig's Pi, removing the
+  transcription step. This is a [Future Enhancement](../requirements/high-level-requirements.md#future-enhancements)
+  (the "machine-readable / hardware-assisted score capture" item — this rig
+  is its first concrete case). The task-descriptor `entry` attribute
+  ([scorer-device.md A.3](../requirements/scorer-device.md#a3-field-definition))
+  already distinguishes `device` from `base` sources, so an `external`
+  source is a natural extension, not a redesign.
+
 ---
 
 ## Open items

@@ -75,6 +75,14 @@ Derived from the [rule docs](rules/); those remain authoritative on numbers.
 | **F5K** (tasks A–E) | flight time (whole s); **AMRT launch altitude** (m); target **Y/N** (Task E); landed-in-pilot-area? — launch count inferred from flight numbers | up to 3–4 launches per task |
 | **F5L** | flight time (whole s); landing tape reading | unlimited attempts; **last flight official** |
 
+**F3B laps and course times — source of the reading** *(owner-noted
+2026-07-08)*: the local F3B scene already runs a custom wireless lap/speed
+timing rig with its own Raspberry-Pi base station. In the MVP the Scorer
+**reads those values off that system and cross-enters them on the
+hand-held** — ordinary raw capture, no link between the systems. Direct
+base-to-base ingestion is a future enhancement
+([physical architecture §9](../architecture/physical-architecture.md#9-adjacent-system--the-local-f3b-lapspeed-timing-rig)).
+
 **Descriptor-driven capture** *(owner-confirmed 2026-07-07)*: there is no
 single "first discipline" — any of the six classes could be run first. At
 **competition start the Base Station instructs the device which class it is
