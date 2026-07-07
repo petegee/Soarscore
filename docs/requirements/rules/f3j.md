@@ -71,10 +71,12 @@ Round score = the normalised group score.
 
 ---
 
-## 5. Final classification (`F3J.11`)
+## 5. Final classification (`F3J.3.1`, `F3J.11`)
 
-- **Qualifying aggregate** = sum of round scores. **No drop-worst rule is specified
-  for F3J qualifying rounds** in this edition (contrast F5J / F3B / F3K).
+- Minimum **4** qualifying rounds for a valid contest (`F3J.3.1 a`).
+- **Qualifying aggregate** = sum of round scores. **If more than 7 qualification
+  rounds are flown, the lowest round score is discarded** before determining the
+  aggregate (`F3J.3.1 a`) — a higher drop-worst threshold than F5J (4) or F3K (5).
 - Top **≥ 9** qualify for the fly-off (single group, 15-min working time).
 - **Final placing** among qualifiers = **fly-off aggregate only**; qualifying-round
   position breaks fly-off ties.
@@ -83,7 +85,52 @@ Round score = the normalised group score.
 **Common vs specific:** draw framework and 1000-point normalisation are common;
 F3J specifics are the **0.1 s** flight-time precision, this landing-bonus table, the
 −30/zero overfly rule, corrected score truncated to 0.1, the top-9 single-group
-fly-off, and the **absence of a qualifying drop-worst**.
+fly-off, and the **drop-worst only beyond 7 qualification rounds** (the highest
+threshold of the six classes).
+
+---
+
+## 6. Re-flights (`F3J.4`, `F3J.5.2`)
+
+**Entitlement** — the competitor is entitled to a **new working time** if:
+
+- his model, in flight or being launched, collides with a model in the
+  process of being launched;
+- his model, in flight or being launched, collides with **another
+  competitor's towline**, or his towline is hit by a model being launched;
+- a towline other than his own was **not removed after launch and is
+  blocking/covering his own** towline;
+- the attempt was **not judged** by the official timekeepers (also: no
+  official time recorded from the two stopwatches, `F3J.3 e`);
+- the attempt was hindered or aborted by an **unexpected event within the
+  first 60 seconds of working time**, not within his control. **Crossed lines
+  are explicitly *not* a reason** for a re-flight.
+
+**Claim / waiver:** the competitor must ensure the official timekeepers
+**noticed the hindering condition** and must **land as soon as possible**;
+continuing to launch/fly, or re-launching after the condition clears, waives
+the right.
+
+**Placement priorities:**
+
+1. in an **incomplete group**, or a complete group on additional
+   launching/landing spots, with no member of his team in it;
+2. failing that, in a **new group of minimum 4 re-flyers**, filled to 4 by
+   random draw (re-drawn if frequency/team doesn't fit or the drawn pilot
+   won't fly);
+3. failing that, with his **original group at the end of the ongoing round**.
+
+**Which score counts** (cases 2 and 3): the competitor(s) **allocated the
+re-flight score the re-flight** (official even if worse); every other pilot in
+the group scores the **better of** original flight and re-flight, and gets no
+further entitlement if the re-flight is hindered.
+
+**Group neutralisation** (`F3J.5.2`): during **fly-off rounds and the last
+group of a qualification round only**, if a re-flight event (other than the
+blocked-towline case) occurs **within the first 30 seconds** of working time,
+the Contest Director may **neutralise the whole group**: stop the working
+time, call all competitors to land, and restart the group from preparation
+time.
 
 ---
 
@@ -91,6 +138,9 @@ fly-off, and the **absence of a qualifying drop-worst**.
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.
 
+- Rounds, attempts & the >7-rounds discard: [F3J.3](source-docs/f3-soaring-2025.md#f3j3-contest-flights)
+- Re-flights: [F3J.4](source-docs/f3-soaring-2025.md#f3j4-re-flights)
+- Neutralisation of a flight group: [F3J.5.2](source-docs/f3-soaring-2025.md#f3j52-neutralisation-of-a-flight-group)
 - Organisation of the flying / groups: [F3J.6](source-docs/f3-soaring-2025.md#f3j6-organisation-of-the-flying)
 - Scoring: [F3J.10](source-docs/f3-soaring-2025.md#f3j10-scoring)
 - Landing evaluation (bonus table): [F3J.10.5](source-docs/f3-soaring-2025.md#f3j105-landing-evaluation)

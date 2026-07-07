@@ -96,10 +96,40 @@ rounds**.
 
 ---
 
+## 6. Re-flights (`5.5.10.13`)
+
+**Mid-air collisions earn *no* re-flight and no penalty** in F5K.
+
+**Entitlement** — the competitor is entitled to a re-flight if:
+
+- the attempt could not be performed correctly due to the **organiser's
+  fault**;
+- the **launch altitude was not recorded in the AMRT**, and/or the associated
+  external AMRT software could not determine the launch altitude;
+- the attempt was **not judged by the timekeeper** — provided the helper/pilot
+  **informed the timekeeper of the model's position** a reasonable time before
+  landing, else no entitlement.
+
+**Placement priorities** (stated for the organiser's-fault case):
+
+1. in a **following group**;
+2. failing that, in a **new group of minimum 4 re-flyers**, completed by
+   random draw (re-drawn if frequency/team doesn't fit or the drawn pilot
+   won't fly);
+3. failing that, with the **original group at the end of the ongoing round**.
+
+**Which score counts** (cases 2 and 3): re-flyers allocated the new attempt
+score the **re-flight** (official even if worse); the other pilots in the
+group score the **better of** their two results, with no further entitlement
+if the re-flight is hindered by organiser's fault.
+
+---
+
 ## Source references
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.
 
+- Re-flight: [5.5.10.13](source-docs/f5-electric-2026.md#551013-reflight)
 - Task overview A–E: [5.5.10.2](source-docs/f5-electric-2026.md#55102-task-overview)
 - Nominal Launch Height: [5.5.10.3](source-docs/f5-electric-2026.md#55103-nominal-launch-height-nlh)
 - Launch points related to the NLH: [5.5.10.4](source-docs/f5-electric-2026.md#55104-launch-points-related-to-the-nlh)

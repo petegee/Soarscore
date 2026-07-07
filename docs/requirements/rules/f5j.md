@@ -101,10 +101,46 @@ fly-off.
 
 ---
 
+## 6. Re-flights (`5.5.11.6`)
+
+**Entitlement** — the competitor is entitled to a re-flight if:
+
+- his model, in the process of being launched, collides with another model
+  being launched;
+- his model, in flight, collides with another model in flight;
+- the attempt was **not judged** by the timekeeper — provided the
+  helper/competitor **informed the timekeeper of the model's position** a
+  reasonable time before landing, else no entitlement (likewise if **no time
+  was recorded**, `5.5.11.5 d`);
+- the attempt was hindered or aborted by an **unexpected event not within his
+  control**.
+
+**Claim / waiver:** the competitor must ensure the timekeeper **noted the
+hindering condition** and must **land as soon as possible**; continuing to
+launch or fly afterwards waives the right to a new working time.
+
+**Placement priorities:**
+
+1. in an **incomplete group**, or a complete group on additional
+   launching/landing spots;
+2. failing that, in a **new group of minimum 6 re-flyers** (note: 6, not the
+   4 used by F3J/F3K/F5K), made up by random draw (re-drawn if frequency/team
+   doesn't fit or the drawn pilot won't fly);
+3. failing that, with the **original group at the end of the ongoing round**.
+
+**Which score counts** (cases 2 and 3): competitors **allocated the re-flight
+score the re-flight** (official even if worse); the other pilots in the group
+score the **better of** their ongoing-round score and the re-flight score. A
+pilot not allocated the new attempt gets no further working time if the
+re-flight is hindered.
+
+---
+
 ## Source references
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.
 
+- Re-flights: [5.5.11.6](source-docs/f5-electric-2026.md#55116-re-flights)
 - Organisation of the flying / groups & fly-off: [5.5.11.8](source-docs/f5-electric-2026.md#55118-organisation-of-the-flying)
 - Scoring (flight, height deduction, landing table): [5.5.11.12](source-docs/f5-electric-2026.md#551112-scoring)
 - Final classification & fly-off (top 30%): [5.5.11.13](source-docs/f5-electric-2026.md#551113-final-classification)

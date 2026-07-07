@@ -8,9 +8,9 @@ differences.
 
 **Scope.** Only material that the competition-management software must act on:
 how pilots are assigned to groups (the draw), what a timer/helper records (and to
-what precision), and how group / round / final scores are computed. Construction,
-wingspan, wind limits, flying-site geometry, roles and re-flight mechanics are out
-of scope.
+what precision), how group / round / final scores are computed, and how
+**re-flights** are granted, placed and scored (§7). Construction, wingspan, wind
+limits, flying-site geometry and roles are out of scope.
 
 > **MVP scope note.** The MVP is **individual-only** and assumes **all
 > competitors fly 2.4 GHz spread-spectrum**. Accordingly the **team** rules
@@ -109,7 +109,8 @@ the three per-task partial scores** (Duration + Distance + Speed).
 - **Aggregate** = sum of the competitor's round scores.
 - **Drop-worst:** once more than a class-specific number of rounds is flown, the
   lowest-scoring round is discarded (threshold and unit — round vs task — are
-  per-class; F3J qualifying has *no* discard).
+  per-class; every class has one — thresholds range from more-than-4 rounds
+  (F5J) to more-than-7 (F3J)).
 - **Penalties** are deducted from the final aggregate and are **retained even if the
   round they occurred in is dropped**.
 - **Fly-off:** where flown, final placing among qualifiers is determined by fly-off
@@ -133,6 +134,51 @@ the three per-task partial scores** (Duration + Distance + Speed).
 
 ---
 
+## 7. Re-flights (common pattern)
+
+There is no single CIAM re-flight chapter — each class defines its own — but
+five of the six classes follow one recognisable pattern. This section records
+the pattern; the **per-class docs are authoritative** on which entitlements a
+class grants and its exact numbers.
+
+- A **re-flight is an entitlement to a new working time** for the affected
+  competitor. It is distinct from another *attempt* within the same working
+  time (classes with unlimited attempts — F3B, F5L — still define re-flights
+  separately).
+- **Common entitlement themes** (each class grants its own subset — see the
+  class docs): a collision during launch or flight; launch-line/towline
+  interference (tow classes); the attempt **not judged** by the official
+  timekeeper(s); an **unexpected event outside the competitor's control**; an
+  **organiser's fault** (the *only* ground in F3K, and the primary one in F5K —
+  both of those classes explicitly grant **no** re-flight for an in-flight
+  mid-air collision).
+- **Claim discipline** (near-identical wording across classes): the competitor
+  must ensure the hindering condition was **noticed/witnessed by an official**,
+  and must **land as soon as possible** after the event. **Continuing to fly,
+  continuing to launch, or re-launching after the event waives** the right to
+  the new working time.
+- **Placement priorities** (F3J, F3K, F5J, F5K; F3B has its own variant, F5L
+  states none): the new working time is granted, in order of preference,
+  1. in an **incomplete or following group** (or a complete group on
+     additional launch spots);
+  2. failing that, in a **new group of re-flyers** (minimum **4**; **6** in
+     F5J), filled up by **random draw** from the other competitors;
+  3. failing that, with the **original group re-flown at the end of the
+     ongoing round**.
+- **Which score counts** (the rule the scoring software must enforce): in
+  priority cases 2 and 3, the competitor(s) **allocated the re-flight score
+  the re-flight — it is their official score even if worse**. Every other
+  pilot flying in that group (random-draw fillers, or the original group
+  re-flying) scores the **better of** their original flight and the re-flight.
+  A filler is **not entitled to a further re-flight** if the re-flight itself
+  is hindered.
+- **Weather interruptions:** where a class allows the Contest Director to
+  interrupt for rain, the contest resumes with **the group that was flying,
+  which receives a re-flight** (F3B Tasks A/B, F3K; F3B Task C resumes
+  per-pilot — see [f3b.md](f3b.md)).
+
+---
+
 ## Source references
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.
@@ -143,3 +189,9 @@ Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs
 - Publishing results: [CIAM General Rules C.13.7](source-docs/ciam-general-rules-2026.md#c137-results-of-international-events)
 - Team classification: [CIAM General Rules C.15.6.2](source-docs/ciam-general-rules-2026.md#c1562-national-team-classification)
 - Penalties: [CIAM General Rules C.19.1](source-docs/ciam-general-rules-2026.md#c191-penalties-imposed-by-the-contest-director)
+- Re-flights (per class): [F3B.1.5](source-docs/f3-soaring-2025.md#f3b15-definition-of-an-attempt),
+  [F3J.4](source-docs/f3-soaring-2025.md#f3j4-re-flights),
+  [F3K.9.6](source-docs/f3-soaring-2025.md#f3k96-re-flights),
+  [F5J 5.5.11.6](source-docs/f5-electric-2026.md#55116-re-flights),
+  [F5K 5.5.10.13](source-docs/f5-electric-2026.md#551013-reflight),
+  [F5L 5.5.12.9](source-docs/f5-electric-2026.md#55129-re-flights)

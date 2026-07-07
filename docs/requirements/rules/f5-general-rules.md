@@ -63,6 +63,27 @@ launch-height term. Rounding of the normalised score is per-class.
 
 ---
 
+## 5. Re-flights
+
+The [parent §7 pattern](00-general-rules.md#7-re-flights-common-pattern)
+applies; per-class docs are authoritative on entitlements:
+
+- **F5J** grants re-flights for launch/flight collisions, un-judged attempts
+  and unexpected events; its new-group placement minimum is **6** re-flyers
+  (the other classes use 4).
+- **F5K** explicitly grants **no re-flight for a mid-air collision**;
+  entitlement is organiser's fault, an un-judged attempt, or — the F5-specific
+  ground — the **AMRT failing to record the launch altitude** (or the AMRT
+  software being unable to determine it).
+- **F5L** (provisional rules) states entitlement only — collision, or an
+  event beyond the competitor's control — with **no placement priorities or
+  better-of scoring rule written**; see [f5l.md](f5l.md).
+- **Un-judged attempts** (F5J/F5K): the competitor is entitled only if the
+  helper/pilot **informed the timekeeper of the model's position** a
+  reasonable time before landing.
+
+---
+
 ## Source references
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.

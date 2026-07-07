@@ -88,10 +88,48 @@ specific.
 
 ---
 
+## 6. Re-flights (`F3B.1.5`, `F3B.1.11`)
+
+Within each task's working time the competitor already has **unlimited
+attempts**; a re-flight is the stronger remedy — a **new working time**.
+
+**Entitlement** (must be duly witnessed by a contest official):
+
+- his model in flight collides with another model in flight, a model in the
+  process of launch, or a launch cable during launching;
+- his model or launch cable in the process of launch collides with another
+  launching model/cable, or with a model in flight;
+- his launch cable is **crossed or fouled** by another competitor's at the
+  point of launch;
+- the flight was **not judged** by the fault of the judges/timekeepers (Task
+  A: pilot/helper must have told the timekeeper the model's position a
+  reasonable time before landing, else no entitlement);
+- an **unexpected event outside the competitor's control** hindered or
+  aborted the flight.
+
+**Claim / waiver:** after a collision the competitor must **land as soon as
+possible**; continuing to fly, continuing to launch, or re-launching waives
+the right.
+
+**Placement & scoring** (`F3B.1.5 e`, Tasks A and B): those entitled fly
+**within an incomplete group or in one or more newly formed groups**; if that
+is not possible, **their original group flies again**. Everyone else in that
+group scores the **better of** their two results; for the entitled
+competitor(s) the **repetition is the official score**.
+
+**Rain interruption** (`F3B.1.11`): Tasks A/B — on resumption the group that
+was flying **receives a re-flight**. Task C — resumption is **per pilot** (the
+pilot flying receives a re-flight); the Task-C field is pre-divided into 3–4
+groups, and an interruption longer than 15 minutes restarts the interrupted
+group with per-group evaluation.
+
+---
+
 ## Source references
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.
 
+- Attempts & re-flights: [F3B.1.5](source-docs/f3-soaring-2025.md#f3b15-definition-of-an-attempt)
 - The draw / organisation of starts: [F3B.1.8](source-docs/f3-soaring-2025.md#f3b18-organisation-of-starts)
 - Weather conditions / interruptions (Task-C rain split): [F3B.1.11](source-docs/f3-soaring-2025.md#f3b111-weather-conditions--interruptions)
 - Task A – Duration: [F3B.2.3](source-docs/f3-soaring-2025.md#f3b23-task-a---duration)

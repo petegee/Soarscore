@@ -94,10 +94,34 @@ and **drop-worst beyond 5 rounds**.
 
 ---
 
+## 6. Re-flights (`5.5.12.9`)
+
+**Entitlement** — the competitor is entitled to a **new working time** if:
+
+- his model, in flight or in the process of being launched, collides with
+  another model flying or being launched;
+- his flight is hindered or aborted by an **event beyond his control**.
+
+**Claim / waiver:** the competitor must ensure the official timekeepers
+**noticed the hindering condition** and must **land as soon as possible**;
+continuing to launch/fly, or re-launching after the condition clears, waives
+the right.
+
+**Placement & scoring — not specified.** The provisional F5L rules state the
+entitlement and claim conditions only; unlike the other five classes they
+write **no placement priorities and no better-of / official-score rule**. The
+software should not invent one: treat the placement of an F5L re-flight as a
+**Contest Director decision**, and record which pattern was applied (if the
+[parent §7 pattern](00-general-rules.md#7-re-flights-common-pattern) is
+borrowed, that is a CD ruling, not an F5L rule).
+
+---
+
 ## Source references
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.
 
+- Re-flights: [5.5.12.9](source-docs/f5-electric-2026.md#55129-re-flights)
 - Description of the competition / draw & fly-off: [5.5.12.4](source-docs/f5-electric-2026.md#55124-description-of-the-competition)
 - Scoring of the flight time (2 pt/s, 390 s cap): [5.5.12.11.1](source-docs/f5-electric-2026.md#5512111-scoring-of-the-flight-time)
 - Scoring of the landing (bonus table): [5.5.12.11.2](source-docs/f5-electric-2026.md#5512112-scoring-of-the-landing)

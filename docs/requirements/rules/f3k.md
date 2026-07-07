@@ -90,10 +90,48 @@ rounds**.
 
 ---
 
+## 6. Re-flights (`F3K.9.6`, `F3K.4.2`, `F3K.2.4`)
+
+**Entitlement** — deliberately narrow in F3K. A **new working time** is
+granted only if:
+
+- the attempt could not be performed correctly due to the **organiser's
+  fault** (`F3K.9.6`);
+- models collide **while one of them is in the start phase** — from the
+  moment the pilot releases the glider until it reaches its highest point
+  (`F3K.4.2`);
+- a person other than the competitor or his helper (e.g. a spectator)
+  **accidentally moves or retrieves** the competitor's model (`F3K.2.4`);
+- the contest is interrupted for **rain** — on resumption the group that was
+  flying receives a re-flight (`F3K.5`).
+
+**Mid-air collisions in free flight earn *no* re-flight and no penalty**
+(`F3K.4.2`) — the start-phase case above is the only exception.
+
+**Placement priorities** (`F3K.9.6`):
+
+1. in a **following group**;
+2. failing that, in a **new group of minimum 4 re-flyers**, completed by
+   random draw (re-drawn if frequency/team doesn't fit or the drawn pilot
+   won't fly);
+3. failing that, with the **original group at the end of the ongoing round**.
+
+In the **fly-off** only option 3 may be used.
+
+**Which score counts** (cases 2 and 3): the re-flyer(s) allocated the new
+attempt score the **re-flight** (official even if worse); the other pilots in
+the group score the **better of** their two results, and are not entitled to
+another working time if the re-flight is hindered by organiser's fault.
+
+---
+
 ## Source references
 
 Deep-links into the verbatim extracted rule text (see [source-docs/](source-docs/)). The official FAI PDFs remain authoritative.
 
+- Re-flights: [F3K.9.6](source-docs/f3-soaring-2025.md#f3k96-re-flights)
+- Mid-air collision (start phase): [F3K.4.2](source-docs/f3-soaring-2025.md#f3k42-mid-air-collision)
+- Retrieval by a spectator: [F3K.2.4](source-docs/f3-soaring-2025.md#f3k24-retrieving-of-model-glider)
 - Definition of a round / groups: [F3K.9](source-docs/f3-soaring-2025.md#f3k9-definition-of-a-round)
 - Groups and round scores (normalisation): [F3K.9.1](source-docs/f3-soaring-2025.md#f3k91-groups-and-round-scores)
 - Scoring, discard & tie-break: [F3K.10](source-docs/f3-soaring-2025.md#f3k10-scoring)

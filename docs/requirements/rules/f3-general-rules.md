@@ -51,9 +51,30 @@ F3J and F3K produce one normalised group score; **F3B normalises per task** (see
 
 - Round score as in the parent (F3B = sum of three partial scores).
 - Drop-worst thresholds differ: **F3B** discards the lowest *partial* per task beyond
-  5 rounds; **F3K** drops the lowest round from 6 rounds; **F3J** qualifying has **no**
-  discard. See per-class docs.
+  5 rounds; **F3K** drops the lowest round from 6 rounds; **F3J** drops the lowest
+  round beyond **7** qualification rounds (`F3J.3.1 a`). See per-class docs.
 - Fly-off and team classification as in the parent.
+
+---
+
+## 5. Re-flights
+
+The [parent §7 pattern](00-general-rules.md#7-re-flights-common-pattern)
+applies, but the three F3 classes diverge sharply on **what earns a
+re-flight** — the per-class docs are authoritative:
+
+- **F3B and F3J** (tow-launched) grant re-flights for launch/flight
+  **collisions and towline interference**, un-judged attempts, and unexpected
+  events outside the competitor's control.
+- **F3K** grants a re-flight **only for an organiser's fault** — an in-flight
+  mid-air collision earns **no re-flight and no penalty**, *except* when one
+  model is still in the **start phase** (release → highest point). A
+  spectator moving/retrieving a model also entitles a new working time.
+- **Rain interruption:** on resumption the group that was flying receives a
+  re-flight (F3B Tasks A/B, F3K; F3B Task C resumes per-pilot).
+
+Placement priorities and the better-of / official-score rule follow the
+parent pattern (new-group minimum **4** re-flyers in both F3J and F3K).
 
 ---
 
