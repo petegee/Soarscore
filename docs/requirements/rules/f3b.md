@@ -26,6 +26,9 @@ Common draw rules per parents, plus F3B specifics (`F3B.1.8`):
 - Flying order of groups is also set by the draw; a different starting order is used
   each round.
 - A **group result is annulled if only one competitor** in it has a valid result.
+- **Minimum for a valid competition (`F3B.1.8 b`):** **one (1) round and one (1)
+  task**. A World/Continental Championship result is valid at **five (5) complete
+  rounds**.
 
 ---
 

@@ -150,16 +150,24 @@ just carries on where it stopped.
   suspend at a **group boundary**, then I am **warned that the round is
   incomplete** but not blocked; on resume the round **simply continues** with
   the remaining groups.
-- [ ] Given the **Scorer correction window** is bounded by next-round start, not
-  wall-clock ([Area 5](../requirements/high-level-requirements.md#area-5--scoring)),
+- [ ] Given Scorer self-correction is **group-bounded** — it ends when the next
+  group starts
+  ([decisions.md D11](../requirements/decisions.md#d11--the-devices-scope-is-the-current-group)),
   when the competition resumes the next day with the same round still open, then
-  a Scorer can still correct a value they captured the previous day — the window
-  **spans the overnight suspension**.
+  suspension (always at a group boundary) has not truncated anything: flown
+  groups were already closed to device edits, and changes to them remain
+  available as base-side score administration
+  ([5.3/5.4](../requirements/high-level-requirements.md#area-5--scoring)).
 - [ ] Given an **unplanned shutdown** (e.g. base-station power loss) instead of a
   clean suspend, when the system restarts, then it resumes into the **correct
   contest state** reconstructed from the event log
   ([decisions.md D4](../requirements/decisions.md#d4--immutable-event-log);
-  [scorer-device.md §9](../requirements/scorer-device.md#9-environment-envelope-d)).
+  [scorer-device.md §9](../requirements/scorer-device.md#9-environment-envelope-d));
+  a group that was **running at the moment of failure is treated as
+  aborted** — restart from preparation, its accumulated metrics annulled
+  ([6.5](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids))
+  — unless the Contest Director instead accepts pen-and-paper results for it
+  ([decisions.md D3](../requirements/decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)).
 - [ ] Given a suspend or resume, when it happens, then it is recorded in the
   event log.
 
@@ -263,14 +271,11 @@ own entry details via the roster ([users.md §5](../requirements/users.md#5-pilo
 ### 3.5 — Configure draw fairness options
 
 **As an** Organiser, **I want** to configure the draw's fairness constraints —
-helper assignment and lane allocation — **so that** the generated draw is fair and
-defensible.
+lane allocation — **so that** the generated draw is fair and defensible.
 
 **Acceptance criteria**
 - [ ] Given a competition, when I configure **lane allocation**, then the draw
   generator uses that policy when assigning lanes within groups.
-- [ ] Given a competition, when I configure **helper assignment**, then the draw
-  accounts for it as a constraint.
 - [ ] Given constraints that cannot all be satisfied for the roster/task, when I
   save them, then I am warned rather than silently getting an unfair draw.
 
@@ -278,8 +283,11 @@ defensible.
 **Notes:** MVP assumes **all competitors on 2.4 GHz** and is **team-free**, so
 **frequency management** and **team-separation** draw constraints
 ([00-general-rules §1](../requirements/rules/00-general-rules.md)) are retained as
-sport reference but **out of MVP software scope** (Future Enhancements). The draw's
-anti-repeat matrix itself is specified at [4.1](#41--specify-the-draw).
+sport reference but **out of MVP software scope** (Future Enhancements). There is
+**no helper-assignment constraint**: the FAI helper/official separation is
+consciously waived at club level — the Scorer **is** the helper
+([decisions.md D1](../requirements/decisions.md#d1--trust-model-small-known-trusted-group)).
+The draw's anti-repeat matrix itself is specified at [4.1](#41--specify-the-draw).
 
 ### 3.6 — Configure scoring options
 
@@ -303,6 +311,13 @@ results are computed correctly for the discipline without me doing the maths.
   of rounds is flown (e.g. more than 4 for F5J, more than 7 for F3J)
   ([00-general-rules §5](../requirements/rules/00-general-rules.md)) — and I am
   warned if I deviate from it (see Conflicts).
+- [ ] Given **any** parameter the class rules fix — the mandated landing-bonus
+  table (F3J/F3B/F5J/F5L each prescribe one), points-per-second (F5L = 2 pt/s,
+  others 1 pt/s), rule-bounded landing-window durations — when I configure it,
+  then the **class rule is the default** and a deviating value requires
+  **explicit confirmation with a warning**, never a silent accept (the same
+  guardrail pattern as drop-worst;
+  [3.6](../requirements/high-level-requirements.md#area-3--competition-setup--configuration)).
 - [ ] Given drop-worst is in effect, when results compute, then **penalties are
   retained even if the round they occurred in is dropped**
   ([00-general-rules §5–6](../requirements/rules/00-general-rules.md)).
@@ -334,7 +349,7 @@ computation is exercised against the same corners.
 
 **As an** Organiser, **I want** to configure each task's scoring parameters
 generically — target times, timing precision, points-per-second, landing-bonus
-table, penalty/deduction types and timekeeper count — **so that** live capture and
+table and penalty/deduction types — **so that** live capture and
 scoring behave correctly for this competition's tasks.
 
 **Acceptance criteria**
@@ -348,15 +363,24 @@ scoring behave correctly for this competition's tasks.
   **landing-bonus table** from master data ([1.2](#12--maintain-reusable-landing-bonus-tables)).
 - [ ] Given a task that scores flight time only, when I configure it, then a landing
   table is not required.
-- [ ] Given a task, when I configure **points-per-second**, **penalty/deduction
-  types** and **timekeeper count**, then those parameters drive capture and scoring
+- [ ] Given a task, when I configure **points-per-second** and
+  **penalty/deduction types**, then those parameters drive capture and scoring
   for that task.
+- [ ] Given a class whose rules leave a scoring constant to the **event** —
+  e.g. **F5K's Nominal Launch Height** (60 m light wind / 70 m moderate,
+  CD-announced — [f5k.md](../requirements/rules/f5k.md)) — when I configure
+  the competition, then that constant has a **named place in 3.7** and feeds
+  the class's scoring computation; rule-fixed values around it (F5K's
+  ±per-metre adjustments) default per the [3.6 guardrail](#36--configure-scoring-options).
 
 **Traces to:** area 3.7 · users.md §1 Organiser
 **Notes:** Intentionally **generic** — discipline-specific tasks and special rules
 are deferred to per-discipline requirements. Precision and which fields exist are
 per-class ([00-general-rules §2](../requirements/rules/00-general-rules.md)); the
-per-class docs are authoritative on numbers.
+per-class docs are authoritative on numbers. There is **no timekeeper-count
+parameter**: the FAI two-timekeeper practice is consciously waived at club level
+— the one Scorer's device time is official
+([decisions.md D1](../requirements/decisions.md#d1--trust-model-small-known-trusted-group)).
 
 ---
 

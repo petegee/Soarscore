@@ -41,7 +41,7 @@ Devices show a **sync-state indicator** and the Base Station group view shows
 each device's state. Written into 6.5/5.7, `users.md`, the CD 6.5/5.7
 stories, and `scorer-device.md` §4.
 
-### A2. Sync conflict policy
+### A2. Sync conflict policy — ✅ RESOLVED
 
 **Context.** With buffer-and-sync (D6) plus base-station manual entry (5.8),
 the same pilot/flight can end up with two captures: one keyed manually after a
@@ -55,6 +55,13 @@ paper fallback, one arriving later when the device reconnects.
    with the losing value retained in the event log and flagged.
 3. Timestamp-based last-writer-wins — *not* recommended; silent, and clock
    trust across devices is exactly what you don't have during a partition.
+
+**Applied:** fix 1 adopted verbatim into
+[scorer-device.md §5](docs/requirements/scorer-device.md#5-sync-and-conflict-policy-a2)
+(never auto-resolve; both captures event-logged; anomaly for the CD
+validation pass; no last-writer-wins). D6's "conflict policy open" wording
+updated accordingly. *(Marked resolved 2026-07-08 via the second report's
+housekeeping pass.)*
 
 ### A3. Interaction design on a small round screen — and the on-device /
 ### base-side split

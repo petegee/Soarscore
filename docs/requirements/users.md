@@ -96,7 +96,8 @@ result. Highest privilege; often the same person as the Organiser in practice.
 | Move a pilot from one group to another for pilot readiness (does **not** change the draw) | [5.3](high-level-requirements.md#area-5--scoring) |
 | Approve the per-contest override to insert a dummy where a class rule would annul a lone-pilot group instead (e.g. F3B) | [5.3](high-level-requirements.md#area-5--scoring) |
 | Retire and reinstate pilots | [5.5](high-level-requirements.md#area-5--scoring) |
-| Exercise run-control authority over a running group — pause/resume preparation and the inter-group gap, fast-forward or add preparation time, release the prep confirmation gate (**pilot unconfirmed** → no-score; **device offline** → no no-score, reconciles on sync), and abort/restart a group | [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids), [5.7](high-level-requirements.md#area-5--scoring) |
+| Exercise run-control authority over a running group — pause/resume preparation, fast-forward or add preparation time, release the prep confirmation gate (**pilot unconfirmed** → no-score; **device offline** → no no-score, reconciles on sync), and abort/restart a group | [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids), [5.7](high-level-requirements.md#area-5--scoring) |
+| Override a blocked round advance ("advance anyway", explicit and attributed) — outstanding missing scores become flagged anomalies for the validation pass; unresolved no-scores convert to zeros; an unflown re-flight entitlement lapses | [6.4](high-level-requirements.md#area-6--display-timer--audio-field-aids), [5.7](high-level-requirements.md#area-5--scoring) |
 | Lock the competition against further changes | [2.2](high-level-requirements.md#area-2--competition-lifecycle) |
 | Publish official results | [7](high-level-requirements.md#area-7--reports) |
 
@@ -199,8 +200,8 @@ at a small contest one person may hold both roles.
 | Run the group's automatic phased timer — preparation, working time, landing window — on the shared clock | [6.1](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
 | Drive the audio callouts tied to the clock — round/group and pilot announcements, per-minute and final-30 s working-time calls, the end-of-working-time horn, and the landing / all-down calls | [6.2](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
 | Show the current round, group and phase countdown on the field board | [6.3](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
-| Start groups and hold/adjust progression between them (Contest-Director authority over prep pause / fast-forward / add-time, gate override and abort) | [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
-| Advance to the next round only once the previous round's scores are all in (gates the [Scorer's](#3-scorer) correction window) | [6.4](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
+| Start **every** group with one deliberate action — groups never start themselves ([D10](decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)); Contest-Director authority covers prep pause / fast-forward / add-time, gate override and abort | [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
+| Advance to the next round only once the previous round's scores are all in | [6.4](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
 
 ---
 

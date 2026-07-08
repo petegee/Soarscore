@@ -106,7 +106,7 @@ stale pilot carried over from the previous group.
   before any score is captured — the **Scorer owns the binding and the
   re-selection**; I only flag it.
 - [ ] Given the preparation countdown **pauses at one minute remaining** until
-  every Scorer in the group has confirmed their pilot
+  every pilot in the group has exactly one confirming device
   ([6.5](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids)),
   when that hold is in effect, then it gives me a **defined window** to do this
   cross-check before working time can begin.
@@ -251,10 +251,12 @@ arrived at and trust it.
   ([general-rules §5](../requirements/rules/00-general-rules.md#5-final-classification-common),
   [§6](../requirements/rules/00-general-rules.md#6-penalties-common)).
 - [ ] Given the contest is still under way, when a round completes, then **that
-  round's results and the cumulative standings are readable on the Base Station
-  screen** (e.g. on the clubhouse table) between rounds — available as the
-  contest proceeds, with no internet required; I do not have to wait for the
-  whole contest to end to see my standing
+  round's results and the cumulative standings are readable on the master
+  laptop's companion app** (e.g. on the clubhouse table) between rounds — and
+  on the **MVP-optional read-only pilot-phone page** where the event serves it
+  ([physical architecture §6](../architecture/physical-architecture.md#6-pilot-phones--optional-read-only-web-page)) —
+  available as the contest proceeds, with no internet required; I do not have
+  to wait for the whole contest to end to see my standing
   ([7.1](../requirements/high-level-requirements.md#area-7--reports);
   [general-rules §5](../requirements/rules/00-general-rules.md#5-final-classification-common)).
 

@@ -47,9 +47,21 @@ capped/scored time; the AMRT number, not the height deduction; what was
 flown, not which flight counts. **All interpretation and calculation is the
 system's**, applied consistently from the raw data — scoring rules, caps,
 bonus tables, and derived judgements (e.g. an over-working-time flight is
-detected by the base from the raw time, never decided by the Scorer). This
-also keeps the device UI to plain observations and makes every computed
-score reproducible from the event log (D4).
+detected by the base from the raw flight timestamps (D9), never decided by
+the Scorer). This also keeps the device UI to plain observations and makes
+every computed score reproducible from the event log (D4).
+
+**The timestamp principle.** *(Owner-decided 2026-07-08,
+[D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock).)* Every
+per-flight record carries **automatic start/stop timestamps on the base's
+shared clock**, stamped by the firmware at the Scorer's start/stop actions —
+the Scorer never enters them. The Scorer times through to the model's
+**first ground contact, even after the horn** (D5 as amended): the system —
+not the Scorer — applies the working-time cap and derives overfly (and its
+magnitude) and launch-before-working-time from the stamps. Offline captures
+stamp against the device's mirrored clock and reconcile on sync (D6); stamps
+that cannot be reconciled within the §7 bound are flagged, never presented
+as exact.
 
 **The multi-flight principle.** A pilot can fly **more than one flight per
 group** — in most classes this is routine (unlimited attempts with
@@ -69,7 +81,7 @@ Derived from the [rule docs](rules/); those remain authoritative on numbers.
 | **F3B A** Duration | flight time (whole s); landing tape reading | unlimited attempts; **last flight official** |
 | **F3B B** Distance | **laps** (completed legs) | unlimited attempts; last official |
 | **F3B C** Speed | course time (1/100 s — course judges, not the shoulder Scorer) | unlimited attempts |
-| **F3J** | flight time (0.1 s); landing tape reading — overfly is derived by the base from the raw time | unlimited attempts; **last flight official** |
+| **F3J** | flight time (0.1 s); landing tape reading — overfly is derived by the base from the flight timestamps (D9) | unlimited attempts; **last flight official** |
 | **F3K** (tasks A–N) | flight time (0.1 s, truncated); poker/ladder **target call + achieved?** — launch count inferred from flight numbers | **many** — the defining case (e.g. 3-of-6, five longest) |
 | **F5J** | flight time (whole s); **AMRT launch height** (m); landing tape reading | **one attempt only** |
 | **F5K** (tasks A–E) | flight time (whole s); **AMRT launch altitude** (m); target **Y/N** (Task E); landed-in-pilot-area? — launch count inferred from flight numbers | up to 3–4 launches per task |
@@ -97,6 +109,19 @@ therefore a first-order design artifact — see Open items.
 The report recommends prototyping the **F3K multi-launch flow** regardless —
 it is the hardest case; if the device handles F3K, everything else fits.
 
+**Descriptor updates reach the fleet at group boundaries** *(owner-decided
+2026-07-08,
+[D11](decisions.md#d11--the-devices-scope-is-the-current-group))*: a
+CD-authorised mid-contest change that alters the descriptor
+([Area 3](high-level-requirements.md#area-3--competition-setup--configuration))
+re-issues it, and the **group-context push carries the current descriptor**
+— a device applies it at its next group entry, **never mid-group**. Group
+entry **requires that push**: an offline device that missed it cannot
+capture for the new group until it syncs (pen and paper, D3, covers the
+meanwhile); a device that received the push and then dropped offline
+continues normally, buffering (D6). Every capture is thus made under the
+descriptor current at its group's start.
+
 ---
 
 ## 2. On-device vs base-side split (A3, C5)
@@ -106,7 +131,9 @@ Not everything belongs on a ~1.3-inch round screen. Proposed split:
 **On-device (per flight, at the pilot's shoulder):**
 
 - Flight timing — physical **start/stop control**; no-look, stopwatch-grade
-  ([users.md §3](users.md#3-scorer)).
+  ([users.md §3](users.md#3-scorer)); each start/stop is stamped on the
+  mirrored base clock
+  ([D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)).
 - **Flight number** — advanced automatically per start/stop cycle.
 - **Launch count** — implied by the flight records; no separate entry.
 - Poker/ladder **target achieved? (Y/N)** — single binary per flight.
@@ -118,8 +145,8 @@ Not everything belongs on a ~1.3-inch round screen. Proposed split:
 - **Laps** (F3B B) — an increment-per-leg counter.
 - Task-integral **penalty quick-flags** — land-out, hit-a-person; one action
   each, confirmed. Over-working-time needs **no** Scorer action: the Base
-  Station flags captured time exceeding working time automatically
-  ([6.1](high-level-requirements.md#area-6--display-timer--audio-field-aids)).
+  Station derives overfly from the flight timestamps automatically (D9;
+  [6.1](high-level-requirements.md#area-6--display-timer--audio-field-aids)).
 
 **Base-side (entered at the Base Station):**
 
@@ -140,6 +167,13 @@ Not everything belongs on a ~1.3-inch round screen. Proposed split:
 - **Confirmation is a deliberate physical action** (e.g. long-press), not a
   tap that can fire in a pocket — it feeds the pre-group confirmation guard
   and prep gate ([5.0](high-level-requirements.md#area-5--scoring)).
+- **Confirmation is an exclusive claim, arbitrated by the base:** the gate's
+  unit is the **pilot** (each group pilot needs exactly one confirming
+  device), and the base **rejects a second device confirming an
+  already-claimed pilot** — the rejecting device tells its Scorer "pilot
+  already claimed" so they pick the right one. Re-selecting away frees the
+  claim; the base group view shows which device holds which pilot
+  ([5.0](high-level-requirements.md#area-5--scoring)).
 - **No-look operation for the time-critical path:** start/stop must be
   operable by feel with eyes on the model. Everything else (landing entry,
   flags) happens in calm moments between flights.
@@ -147,8 +181,11 @@ Not everything belongs on a ~1.3-inch round screen. Proposed split:
   ([Area 6](high-level-requirements.md#area-6--display-timer--audio-field-aids)); see
   Section 7 for the staleness bound.
 - A **mistyped value must be obvious at once and correctable on the device**
-  until the Scorer correction window closes (next round start,
-  [Area 5](high-level-requirements.md#area-5--scoring)).
+  while its group is still current — **up to the start of the next group**
+  ([D11](decisions.md#d11--the-devices-scope-is-the-current-group)). After
+  that, changes to a flown group's data are base-side score administration
+  ([Area 5](high-level-requirements.md#area-5--scoring)) — the device only
+  ever focuses on the current group.
 - **Prototype the F3K multi-launch flow first** — the hardest task
   descriptor (see Open items).
 
@@ -158,7 +195,8 @@ Not everything belongs on a ~1.3-inch round screen. Proposed split:
 
 The prep confirmation gate ([5.0](high-level-requirements.md#area-5--scoring) /
 [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids))
-pauses the countdown at T−1:00 until every Scorer confirms. An offline device
+pauses the countdown at T−1:00 until every pilot has exactly one confirming
+device (Section 3). An offline device
 (D6) cannot deliver its confirmation, and *no confirmation received* must not
 be conflated with *pilot cannot fly*.
 
@@ -172,6 +210,10 @@ be conflated with *pilot cannot fly*.
 2. Every device shows a **sync-state indicator**, and the Base Station's
    group view shows each device's state, so the field can tell "offline"
    from "not confirmed" at a glance.
+3. A **buffered confirmation reconciling on sync passes the same exclusive
+   claim arbitration** (Section 3): if the pilot was claimed by another
+   device in the meantime, the late confirmation is **rejected and surfaced
+   on the group view**, not silently merged — the affected Scorer re-selects.
 
 ---
 
@@ -184,6 +226,25 @@ be conflated with *pilot cannot fly*.
   surfaces as an **anomaly in the CD validation pass**
   ([2.2](high-level-requirements.md#area-2--competition-lifecycle)), and a
   human picks. No timestamp-based last-writer-wins.
+- **A re-flight result is not a conflict:** a re-flight gives the pilot a
+  **second working-time result for the same round**
+  ([5.3](high-level-requirements.md#area-5--scoring);
+  [general-rules §7](rules/00-general-rules.md#7-re-flights-common-pattern)).
+  The data model keeps *capture of a second working-time* distinct from
+  *second capture of the same flight*: the former is stored as its own
+  result and resolved by the scoring rules (better-of, or the re-flight
+  itself for the entitled competitor); only the latter is conflict-flagged.
+- **Captures for an annulled group run are not applied:** when a group run
+  is aborted — by the CD (6.5) or because the base failed while it ran
+  ([physical architecture §3](../architecture/physical-architecture.md)) —
+  buffered captures from that run still sync in and are **event-logged, but
+  not applied**; the re-run's captures are the live ones.
+- **A late correction is rejected, not applied:** a buffered on-device
+  correction that syncs after its group has closed
+  ([D11](decisions.md#d11--the-devices-scope-is-the-current-group)) is
+  **rejected and surfaced** (event-logged, visible on the group view) —
+  applying it from there is base-side score administration, never a silent
+  merge.
 
 ---
 
@@ -210,6 +271,13 @@ The mirrored countdown must be **within ±0.5 s of the base clock**
 device cannot hold that, it **hides the countdown and shows its offline
 indicator** (a 10 s-stale countdown is worse than none). The horn remains the
 timing authority (D5) — no more precision than this is required.
+
+The bound now also serves **scoring**, not just display: the per-flight
+**start/stop timestamps**
+([D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)) must hold
+the same ±0.5 s against the base clock — including captures buffered offline
+and reconciled on sync (D6) — and stamps that cannot be reconciled within it
+are **flagged** for the CD validation pass, never presented as exact.
 
 ---
 
@@ -311,6 +379,11 @@ findings feed back into this doc.
    to the Organiser's base at build time. *Prove:* a pre-bound device joins
    a contest at power-on with no field-side ceremony, and firmware can be
    updated from the Base Station without internet.
+11. **Flight timestamps** (Sections 1, 7;
+   [D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)) —
+   *prove:* start/stop stamps hold ±0.5 s of the base clock, including
+   flights captured while offline and reconciled on sync; unreconcilable
+   stamps are flagged, not silent.
 
 ---
 
@@ -362,6 +435,12 @@ Each entry in `fields[]`:
 | `entry` | `device` \| `base` | the §2 split — target nomination is `base` (AMRT height moved on-device 2026-07-08); the device may *display* a base-entered value but never collects it |
 | `required` | whether a flight record is complete without it — **fields are nullable**; this is how the metadata says which are mandatory for the group's task | round-completeness gate (Area 5) |
 
+> Every per-flight record also carries **automatic start/stop timestamps on
+> the base clock**
+> ([D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)) —
+> firmware-stamped record metadata, not a `fields[]` entry, so the
+> descriptor does not list them.
+
 ### A.4 Per-group push (companion runtime state, not the descriptor)
 
 Round number, group number, **task reference for this round** with any
@@ -409,3 +488,62 @@ Points-per-second, landing-bonus tables, launch-height deduction/bonus
 maths, flight-time caps, which-flight-counts selection, drop-worst,
 normalisation, penalties arithmetic — all of [rules/](rules/) scoring. The
 device collects; the system interprets (§1, raw-capture principle).
+
+## Appendix B — Per-class deduction/penalty classification *(derived 2026-07-08)*
+
+Derived from the [rule digests](rules/) to pin down the descriptor
+contract's event-flag set (Open item 1). Every task-integral deduction or
+zeroing condition in the six classes, classified three ways:
+
+- **Scorer event-flag** — observed at the line; needs a device quick-flag.
+- **System-derived** — computed by the base from raw captures (timestamps
+  D9, AMRT heights, launch counts) plus configuration; **no** Scorer action.
+- **CD-imposed** — administrative penalties entered base-side under
+  [5.9](high-level-requirements.md#area-5--scoring) / manual entry; never on
+  the device.
+
+Items marked *(borderline)* are judgement calls on who realistically
+observes the event — confirm with the owner before the descriptor freeze.
+
+| Class | Event / condition | Effect | Classification |
+|---|---|---|---|
+| all | CD penalties for infringements, dangerous flying, cheating (up to DSQ) | per 5.9 | CD-imposed |
+| all | Land-out (model at rest off the defined area) → flight/bonus zeroed | 0 flight or 0 bonus per class | Scorer event-flag (existing `land_out`) |
+| all | Model contacts a person | per class (−1000 / 0 round …) | Scorer event-flag (existing `model_contacts_person`); CD validates severity |
+| F3J | Overfly ≤ 1 min −30; > 1 min 0; any overfly kills landing bonus | per digest | System-derived (D9) |
+| F3J | Towline not cleared within 30 s | −100 | Scorer event-flag *(borderline — may be a line official's call)* |
+| F3J | Non-conforming winch; unauthorised transmission | −1000; −300 | CD-imposed |
+| F3B A | Time over 600 s −1 pt/s; > 630 s kills landing bonus | per digest | System-derived (D9) |
+| F3B B/C | Task B partial legs; Task C incomplete/early landing → 0 | per digest | Base-side manual entry — Tasks B/C are **manual-run** (D10), Task C course-judged, not the shoulder Scorer |
+| F3B C | Safety-plane crossing | −300 | Base-side (course judges) → CD-imposed path |
+| F3B | Non-conforming winch | −1000 | CD-imposed |
+| F3K | Launch before working time → that flight 0 | per digest | System-derived (D9 — named in the decision) |
+| F3K | Scored time capped at task target/max | cap | System-derived (descriptor `cap`) |
+| F3K | Flying outside the assigned window | −100 | Scorer event-flag *(borderline — airspace call)* |
+| F3K | Unsigned score card → round 0 | waived | N/A — consciously waived (D1) |
+| F5J | Wrong launch direction; motor before signal; launch not straight 3 s | −100 each | Scorer event-flag *(borderline — launch-marshal territory; MVP has only the shoulder Scorer)* |
+| F5J | Launch outside ±2 m corridor → flight 0 | 0 | Scorer event-flag |
+| F5J | Motor runs past the 30 s motor-run period → flight 0 | 0 | Scorer event-flag *(borderline — AMRT data may show it)* |
+| F5J | AMRT records no start height → flight 0 | 0 | System-derived (missing AMRT capture) |
+| F5J | Overfly > 1 min → 0; any overfly kills landing bonus | per digest | System-derived (D9) |
+| F5J | Start-height deduction (0.5 / 3 pt per m) | deduction | System-derived (captured AMRT height) |
+| F5K | Overfly landing window | −100 | System-derived (D9) |
+| F5K | Motor restart in flight → flight 0 | 0 | Scorer event-flag |
+| F5K | Landing outside Pilot Area (on field) | −10 per landing | Scorer event-flag |
+| F5K | 2nd/3rd-launch penalties (Tasks B/E) | −10/−20/−30 | System-derived (launch count from flight records) |
+| F5K | NLH launch bonus/penalty (+0.5 / −1 / −3 per m); no bonus < 30 s | per digest | System-derived (AMRT height + NLH config, 3.7) |
+| F5K | Safety-zone infringement | −300 | CD-imposed |
+| F5K | Hits anyone but self/timer → round 0 | 0 round | Scorer event-flag (`model_contacts_person`) + CD validation |
+| F5L | Overfly > 30 s → whole task 0; time past 390 s deducted back | per digest | System-derived (D9 + cap) |
+| F5L | Landing outside area → flight 0 | 0 | Scorer event-flag (`land_out`) |
+| F5L | Model touches pilot/helper at landing; touched before measuring; lost part → landing 0 | 0 bonus | Scorer event-flag (one flag: `landing_invalid`, reason picked in a calm moment) |
+| F5L | AMRT presets wrong (≠ 30 s / 90 m) → flight 0 | 0 | Base-side equipment check → CD-imposed path |
+| F5L | Helper-timed fallback deviation > 3 s → flight 0 | waived | N/A — the device is the official time (D1/D2 waiver) |
+
+**Descriptor impact:** the Scorer event-flag column defines the complete
+per-class `flags[]` set for the task descriptor (A.3) — beyond the two
+worked-example flags (`land_out`, `model_contacts_person`) it adds, at
+most: F3J `towline_not_cleared`, F3K `outside_window`, F5J
+`launch_infringement` (one flag, reason coded), `motor_overrun`, F5K
+`motor_restart`, `outside_pilot_area`, F5L `landing_invalid`. Everything
+else is system-side arithmetic (A.6) or base-side administration.

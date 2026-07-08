@@ -30,8 +30,10 @@ docs/architecture/
 docs/requirements/
   high-level-requirements.md   Areas 1–7 (epics/features). The backbone index.
   users.md                     Roles, needs, tasks; cross-refs the areas.
-  decisions.md                 Recorded cross-cutting decisions (D1–D8). Settled;
+  decisions.md                 Recorded cross-cutting decisions (D1–D11). Settled;
                                don't re-litigate per session.
+  non-functional.md            NFRs: one centralised flexible task model;
+                               additive-only extensibility for new classes.
   scorer-device.md             Scorer handheld requirements (capture model,
                                on-device/base split, sync, fleet). Draft with
                                OPEN questions.
@@ -79,7 +81,8 @@ The FAI PDFs (source-docs) remain the ultimate authority.
 - **Failure policy:** any system failure → **pen and paper**, manual entry at
   the Base Station afterwards; the CD validates/overrides scores before Lock.
 - **Timing:** end of working time does **not** auto-stop device stopwatches —
-  the Scorer stops on the horn; over-working-time captures are flagged.
+  the Scorer times through to touchdown; per-flight **base-clock timestamps**
+  let the system apply the cap and derive overflies (D5/D9).
 - **Scale:** ≤ 20 pilots, ≤ 8 rounds/day, 1–2 day events; overnight
   suspend/resume is MVP.
 
@@ -94,9 +97,10 @@ The FAI PDFs (source-docs) remain the ultimate authority.
 - When fleshing out a discipline, do it **one class at a time**; put shared
   material in the general/family doc and only the delta in the per-class doc.
 - **Area 6 (Display/Timer/Audio)** is **confirmed and in MVP scope**: a bright
-  field board + loudspeakers, driven by the Base Station from one shared clock,
-  running an automatic phased group sequence (prep → working → landing →
-  inter-group gap) with Contest-Director run control.
+  field board + loudspeakers, driven by the Base Station from one shared clock.
+  Group/round boundaries are **operator-driven** (D10 — nothing starts itself);
+  duration-shaped tasks run an automatic phased sequence (prep → working →
+  landing) *inside* a started group, with Contest-Director run control.
 
 ## House-keeping rules
 

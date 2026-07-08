@@ -75,6 +75,12 @@ audio hang off it by wire.
   mutation from every client lands here; current state is derivable from the
   log, so after an unplanned reboot the base resumes into the correct
   contest state ([scorer-device.md §9](../requirements/scorer-device.md#9-environment-envelope-d)).
+  A group that was **running at the moment of failure is treated as aborted**
+  on resume *(owner-decided 2026-07-08)* — the existing 6.5 abort semantics:
+  restart from preparation, accumulated metrics annulled — unless the
+  Contest Director instead accepts pen-and-paper results for it under D3.
+  Devices' buffered captures for the annulled run sync in but are not
+  applied (event-logged only).
 - **Owns the shared clock** and runs the automatic phased group sequence
   ([Area 6](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids)) —
   a group in progress continues even with no laptop connected.
@@ -161,17 +167,29 @@ without stopping a running group.
 - **Manual entry & paper fallback** (5.8) after a failure (D3).
 - **Reports and printing** (Area 7) — the printer hangs off the laptop, and
   the **mid-contest standings screen** (7.1, e.g. on the clubhouse table) is
-  the laptop's screen.
+  a companion client's screen — the master laptop's, or a second connected
+  client's (see Implications).
 - **Publishing when internet exists** (D6) — the laptop is the only machine
   that ever touches the internet; the base never does.
 
 **Implications**
 
-- **Run-control needs the laptop present.** The base runs a started group
-  autonomously, but starting, holding, gate-releasing and advancing rounds
-  are operator actions with no UI on the headless base. Whoever holds the
-  run-control hat (CD / Announcer) needs the laptop — or a second client
-  device (see Open items) — within reach of the flight line.
+- **Run-control needs a companion client present.** The base runs a started
+  group autonomously, but starting, holding, gate-releasing and advancing
+  rounds are operator actions with no UI on the headless base. Whoever holds
+  the run-control hat (CD / Announcer) needs a companion client — the laptop
+  or a second client device (see Open items) — within reach of the flight
+  line.
+- **Multiple companion clients may connect concurrently** *(owner-decided
+  2026-07-08)*: the base accepts actions from any connected client,
+  **last-action-wins**, with every action event-logged with its originating
+  client and exercised authority
+  ([D4 attribution](../requirements/decisions.md#d4--immutable-event-log)).
+  There is no control-session lock — the small trusted group (D1)
+  coordinates who is operating by convention, and the log settles any
+  dispute. This also dissolves the laptop's double-booking: a second client
+  can sit on the clubhouse table showing standings while the flight line
+  keeps run control.
 - The laptop needs no special resilience: if it dies, any other laptop with
   the companion app (or the pen-and-paper fallback, D3) takes over, because
   it holds no state.
@@ -219,7 +237,7 @@ job, on its own connection, when one exists (D6).
 
 | Device | Power | On failure |
 |---|---|---|
-| Base Station | field power, full day | contest halts → pen and paper (D3); reboot-resume from event log (D4) |
+| Base Station | field power, full day | contest halts → pen and paper (D3); reboot-resume from event log (D4); a group running at failure is aborted on resume (§3) |
 | Scorer device | ≈ 8 h battery | swap a spare; buffered data syncs (D6) |
 | Board | field power (largest draw) | audio alone carries the group; fix between groups |
 | Speakers/amp | field power | **group cannot run** — the horn is the authority (D5); hold via run-control |

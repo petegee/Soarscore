@@ -222,7 +222,14 @@ correctly.
 **Notes:** **Handoff:** the Organiser *prepares and executes* the mechanics; the
 Director *authorises*. Distinct from a **pilot-readiness group move** (next
 story, no re-draw) and from **retirement (5.5)**, which *does* re-draw remaining
-rounds.
+rounds. A re-flight result is a **distinct working-time result** — the same
+pilot legitimately holds two results for the round, resolved by the scoring
+rules above, never by the sync-conflict machinery
+([scorer-device.md §5](../requirements/scorer-device.md#5-sync-and-conflict-policy-a2)).
+A **granted-but-unflown** re-flight blocks the round advance
+([6.4](04-announcer-timekeeper.md#64--advance-to-the-next-round-only-when-scoring-is-complete))
+until flown or overridden away (the entitlement then lapses —
+[6.5](#65--run-control-authority-over-a-running-group)).
 
 ### 5.3 — Move a pilot between groups for readiness (no re-draw)
 
@@ -279,6 +286,15 @@ rule.
 - [ ] Given my approval (or refusal), when it is recorded, then it is
   **attributable** to me and scoped to this contest only, so it is not silently
   reused elsewhere.
+- [ ] Given an F3B group where, **at group-score time**, only one competitor
+  holds a **valid result** — however it arose, including a full group where
+  everyone else scored zero/invalid (e.g. all landed out) — when scores
+  compute, then the system does **not** hand the lone valid pilot 1000: it
+  flags the group as **annulled per F3B**
+  ([f3b.md](../requirements/rules/f3b.md)), whose consequence is a
+  **re-flight of the group** via the re-flight mechanics
+  ([5.3](#53--approve-re-flights-and-group-changes)), surfaced through this
+  same warning path.
 
 **Traces to:** area 5.3 · users.md §2 Contest Director
 **Notes:** **Handoff:** the Organiser *executes* the dummy insertion; the
@@ -322,8 +338,12 @@ correcting a captured task metric
 ([5.4](01-organiser.md#54--review-and-correct-scores-by-pilot)). It is also
 distinct from the **task-integral deductions** a
 [Scorer](03-scorer.md#523--record-task-integral-deductions-the-flight-incurs)
-records at the line (land-outs, the model contacting a person, working-time
-overruns, a zero'd flight): those are part of scoring the flight, whereas the
+records at the line (land-outs, the model contacting a person) and from the
+**system-derived conditions** computed from the raw captures (working-time
+overruns via the flight timestamps, zeroed flights —
+[decisions.md D9](../requirements/decisions.md#d9--per-flight-timestamps-on-the-base-clock);
+[scorer-device.md §1](../requirements/scorer-device.md#1-capture-model--what-a-scorer-records)):
+those are all part of scoring the flight, whereas the
 **discretionary disciplinary penalties** in this story — unsporting behaviour,
 cheating, dangerous flying, up to disqualification — are the Director's alone and
 are never entered on a Scorer device. The penalty-survives-the-drop behaviour is
@@ -411,9 +431,11 @@ via the **"pilot unconfirmed"** form of the
 ## Area 6 — Field Run Control (authority slice)
 
 > The Director's slice of Area 6 is **authority over a running group** — holding,
-> shortening or extending preparation, overriding the prep confirmation gate, and
-> aborting a group. The **operational running** of the clock, callouts and board is
-> the [Announcer/Timekeeper's](04-announcer-timekeeper.md); at a small contest one
+> shortening or extending preparation, overriding the prep confirmation gate,
+> aborting a group — plus **overriding a blocked round advance** ("advance
+> anyway", [D10](../requirements/decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)).
+> The **operational running** of the clock, callouts and board is the
+> [Announcer/Timekeeper's](04-announcer-timekeeper.md); at a small contest one
 > person may hold both. Working time and the landing window run to their configured
 > durations and are **not** the Director's to pause or shorten.
 
@@ -421,12 +443,12 @@ via the **"pilot unconfirmed"** form of the
 
 **As the** Contest Director, **I want** authority over how a running group is held
 and adjusted — pausing or fast-forwarding preparation, overriding the prep
-confirmation gate, and aborting a group — **so that** I can keep the event moving
-and resolve real-world holds without contravening the fixed working-time and
-landing-window durations.
+confirmation gate, aborting a group, and overriding a blocked round advance —
+**so that** I can keep the event moving and resolve real-world holds without
+contravening the fixed working-time and landing-window durations.
 
 **Acceptance criteria**
-- [ ] Given a group in **preparation** (or the inter-group gap before it), when I
+- [ ] Given a group in **preparation**, when I
   **pause** it, then the countdown holds until I **resume** — and I **cannot**
   pause **working time or the landing window**, which run to their configured
   durations ([6.1](04-announcer-timekeeper.md#area-61--timer--phases)).
@@ -436,7 +458,7 @@ landing-window durations.
 - [ ] Given a competitor is not ready, when I **add time**, then each invocation
   adds **one minute** to the preparation countdown.
 - [ ] Given the prep **confirmation gate** has paused the countdown at one minute
-  because not every Scorer has confirmed their pilot
+  because not every pilot has a confirming device
   ([5.0.4](03-scorer.md#504--pre-group-confirmation-guard-blocks-entry-until-re-confirmed)),
   when the blocking device is shown as **offline** (its sync-state indicator on
   the Base Station group view) and I release the gate as **"device offline"**,
@@ -453,6 +475,18 @@ landing-window durations.
 - [ ] Given a range hold or other disruption mid-working-time, when I **abort the
   group**, then it **restarts from preparation** and any times/metrics already
   captured for that group are **annulled**.
+- [ ] Given a round advance the system has **blocked** (missing scores,
+  unresolved no-scores or a granted-but-unflown re-flight listed —
+  [6.4](04-announcer-timekeeper.md#64--advance-to-the-next-round-only-when-scoring-is-complete)),
+  when I issue an explicit **"advance anyway" override**
+  ([D10](../requirements/decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)),
+  then the advance proceeds: outstanding missing scores become **flagged
+  anomalies** for my end-of-contest validation pass
+  ([2.2](#22--lock-the-competition-against-further-changes)), unresolved
+  no-scores convert to **zeros**
+  ([5.7](#57--resolve-a-no-scored-did-not-fly-pilot)), and an unflown
+  re-flight entitlement **lapses** (the original result stands, flagged) —
+  only I can issue this override, and it is attributed to me.
 - [ ] Given any of these actions, when applied, then they are **attributable** to
   me; the operational start/hold of the clock itself is the
   [Announcer/Timekeeper's](04-announcer-timekeeper.md), while these authority

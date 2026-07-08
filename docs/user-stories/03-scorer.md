@@ -8,9 +8,11 @@ Several Scorers therefore capture **in parallel** within a group, one at each
 pilot's shoulder, and every entry is attributed **automatically to the
 competitor the device is set to** — no paper cards, no later transcription.
 
-The Scorer's needs are physical: **eyes on the flight, not the screen** — large
-touch targets, minimal keystrokes, sensible defaults, and input laid out to
-**match the shape of the task**. The central risk is the **wrong-pilot failure
+The Scorer's needs are physical: **eyes on the flight, not the screen** —
+no-look, stopwatch-grade operation on a dedicated handheld (a physical
+start/stop control, minimal deliberate interactions, sensible defaults —
+[decisions.md D2](../requirements/decisions.md#d2--scorer-device-dedicated-esp32-stopwatch-style-handheld)),
+and input laid out to **match the shape of the task**. The central risk is the **wrong-pilot failure
 mode**: if a device is set to the wrong competitor, a correctly-captured value
 lands against the wrong person silently. Guarding that path is what most of
 these stories exist to make testable.
@@ -127,9 +129,11 @@ to physically swap handsets.
 - [ ] Given I re-select, when I do so, then the previous group's captured results
   are **not altered** by the new selection — re-selection changes the active
   target only. Correcting a value I captured is governed by my correction window
-  ([5.1.2](#512--eyes-on-the-flight-capture-with-obvious-mistypes)); once the
-  **next round** starts that window closes and any change becomes Organiser/
-  Director administration ([5.3/5.4](../requirements/high-level-requirements.md#area-5--scoring)).
+  ([5.1.2](#512--eyes-on-the-flight-capture-with-obvious-mistypes)); starting
+  the **next group** closes that window and any change to the flown group
+  becomes Organiser/Director administration
+  ([5.3/5.4](../requirements/high-level-requirements.md#area-5--scoring);
+  [decisions.md D11](../requirements/decisions.md#d11--the-devices-scope-is-the-current-group)).
 
 **Traces to:** area(s) 5.0 · users.md §3 Scorer
 **Notes:** MVP is **device re-selection**, *not* device-to-device sync or
@@ -159,6 +163,12 @@ scores against the wrong competitor.
 - [ ] Given confirmation is per-group, when the same competitor genuinely flies
   the next group too, then I must still re-confirm them for that group (the guard
   does not exempt an unchanged pilot).
+- [ ] Given another device has already confirmed (claimed) the pilot I select,
+  when I attempt to confirm them, then the base **rejects** my confirmation and
+  the device tells me the **pilot is already claimed by another device**, so I
+  select the right pilot instead — one pilot can never have two capture
+  devices while another goes Scorer-less
+  ([5.0](../requirements/high-level-requirements.md#area-5--scoring)).
 
 **Traces to:** area(s) 5.0 · users.md §3 Scorer
 **Notes:** This is the primary defence against the **wrong-pilot failure mode**
@@ -167,7 +177,9 @@ named in [`users.md §3`](../requirements/users.md#3-scorer) and
 *per-group* arming, distinct from the one-time selection in
 [5.0.1](#501--select-the-competitor-to-score-from-the-groups-pilot-list). The same
 confirmation also **feeds the group's prep gate**: the preparation countdown pauses
-at one minute remaining until every Scorer in the group has confirmed
+at one minute remaining until **every pilot in the group has exactly one
+confirming device** — the gate's unit is the pilot, and each confirmation is an
+**exclusive claim** arbitrated by the base
 ([6.5](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids)).
 
 ### 5.0.5 — Mark that the pilot cannot make the group (no-score)
@@ -235,30 +247,36 @@ the [logical architecture](../architecture/logical-architecture.md).
 ### 5.1.2 — Eyes-on-the-flight capture with obvious mistypes
 
 **As a** Scorer, **I want** capture to work while my eyes are on the model and
-the pilot — large targets, few keystrokes, sensible defaults, and instantly
-visible values — **so that** I can score accurately without looking down and a
-mistyped value is obvious at once.
+the pilot — no-look stopwatch-grade controls, few deliberate interactions,
+sensible defaults, and instantly visible values — **so that** I can score
+accurately without looking down and a mistyped value is obvious at once.
 
 **Acceptance criteria**
 - [ ] Given I am watching the flight, when I capture a metric, then it takes
-  **minimal keystrokes** and uses **large touch targets** and sensible defaults,
-  so I need not study the screen (stated needs in
-  [`users.md §3`](../requirements/users.md#3-scorer)).
+  **minimal, deliberate interactions** — a physical start/stop operable by
+  feel, sensible defaults — so I need not study the screen (**no-look,
+  stopwatch-grade operation**, not a phone-style touch UI; stated needs in
+  [`users.md §3`](../requirements/users.md#3-scorer),
+  [decisions.md D2](../requirements/decisions.md#d2--scorer-device-dedicated-esp32-stopwatch-style-handheld)).
 - [ ] Given I enter a value, when it is captured, then it is **shown back
   immediately** and legibly, so an out-of-range or mistyped value is obvious in
   the moment.
-- [ ] Given I spot a value I entered for my pilot is wrong, when I correct it **any
-  time up to the start of the next round**, then the correction replaces the value
-  with the confirmed competitor and round/group unchanged — my own capture stays
-  Scorer-editable for the whole of the round it was flown in, across the group's
-  own working time and any later group in the same round.
-- [ ] Given the **next round has started**, when I try to change a value from a
-  previous round, then it is **no longer Scorer-editable** — it has become
-  mid-contest score administration for the Organiser/Director
-  ([5.3/5.4](../requirements/high-level-requirements.md#area-5--scoring)). The
-  round-close that ends my window is the same gate that requires **all** of a
-  round's scores to be in before the next round can start (see
-  [5.1.3](#513--concurrent-capture-within-a-group-without-cross-attribution)).
+- [ ] Given I spot a value I entered for my pilot is wrong, when I correct it
+  **while the group is still current — up to the start of the next group**
+  ([decisions.md D11](../requirements/decisions.md#d11--the-devices-scope-is-the-current-group)),
+  then the correction replaces the value with the confirmed competitor and
+  round/group unchanged.
+- [ ] Given the **next group has started**, when a value from a flown group needs
+  changing, then it is **no longer editable from my device** — my device focuses
+  only on the current group; the change is made base-side, as mid-contest score
+  administration via the companion app
+  ([5.3/5.4](../requirements/high-level-requirements.md#area-5--scoring)) or in
+  the Contest Director's end-of-contest validation
+  ([5.8](../requirements/high-level-requirements.md#area-5--scoring)).
+- [ ] Given my device buffered a correction while offline and its group has since
+  closed, when it syncs, then the base **rejects and surfaces** the late
+  correction rather than silently applying it
+  ([scorer-device.md §5](../requirements/scorer-device.md#5-sync-and-conflict-policy-a2)).
 
 **Traces to:** area(s) 5.1 · users.md §3 Scorer
 **Notes:** *Interaction qualities* only — the requirements call for these; no
@@ -285,9 +303,9 @@ scored in parallel with no collision or cross-attribution between us.
   still owe a result**, so a missing capture is visible at the point of capture.
 - [ ] Given a round is not fully captured, when anyone attempts to start the
   **next round**, then it is **blocked until every group in the previous round has
-  all its scores in** — this both guarantees no capture is stranded and defines
-  the round-close that ends the Scorer correction window
-  ([5.1.2](#512--eyes-on-the-flight-capture-with-obvious-mistypes)).
+  all its scores in** — guaranteeing no capture is stranded. (The Scorer
+  correction window is separately bounded, ending at the **next group start** —
+  [5.1.2](#512--eyes-on-the-flight-capture-with-obvious-mistypes).)
   *(Owning and operating that gate — chasing the outstanding captures and deciding
   to proceed — is Organiser [5.6](../requirements/high-level-requirements.md#area-5--scoring)
   / round-progression oversight; the Scorer device only surfaces the outstanding
@@ -377,6 +395,12 @@ nothing irrelevant.
   derived judgements (e.g. an over-working-time flight) are applied by the
   system from the raw data, consistently for every pilot
   ([scorer-device.md §1](../requirements/scorer-device.md#1-capture-model--what-a-scorer-records)).
+- [ ] Given the working time ends while my pilot's model is still airborne,
+  when it lands, then I keep timing to **first ground contact** — the watch
+  does not stop at the horn — and the system applies the working-time cap
+  and derives the overfly from the flight's **base-clock timestamps**, never
+  from my judgement
+  ([decisions.md D5/D9](../requirements/decisions.md#d9--per-flight-timestamps-on-the-base-clock)).
 - [ ] Given a nominated-time (Poker/ladder) task, when the pilot nominates a
   target before a launch, then I can record the **target time and whether it was
   achieved**.
@@ -468,17 +492,20 @@ They are kept here as a record of the decision and its cross-doc consequences.
      ends.
 
 2. **Scorer correction window — RESOLVED.** The Scorer may correct a value they
-   captured **for their pilot up to the start of the next round**; once the next
-   round starts the value is no longer Scorer-editable and any change is
-   Organiser/Director administration
+   captured for their pilot on the device; once the window closes the value is
+   no longer Scorer-editable and any change is Organiser/Director administration
    ([5.3/5.4](../requirements/high-level-requirements.md#area-5--scoring)). Applied
    in [5.1.2](#512--eyes-on-the-flight-capture-with-obvious-mistypes) and
    [5.0.3](#503--re-select-the-pilot-between-back-to-back-groups).
+   *(Amended 2026-07-08,
+   [D11](../requirements/decisions.md#d11--the-devices-scope-is-the-current-group):
+   the window was **narrowed from next-round start to next-group start** — the
+   device's scope is the current group only; post-group changes are base-side.)*
 
 3. **Round-close gate — RESOLVED (ties to item 2).** The **next round cannot start
-   until every group in the previous round has all its scores in.** This both
-   ensures no capture is stranded and defines the round-close that ends the Scorer
-   correction window. The Scorer device surfaces *which of its confirmed
+   until every group in the previous round has all its scores in.** This ensures
+   no capture is stranded *(since the D11 amendment to item 2 it no longer bounds
+   Scorer corrections — those end at the next group start)*. The Scorer device surfaces *which of its confirmed
    competitors still owe a result* and honours the window; **owning and operating
    the gate** (chasing outstanding captures, deciding to proceed) is Organiser
    [5.6](../requirements/high-level-requirements.md#area-5--scoring) /
@@ -487,8 +514,8 @@ They are kept here as a record of the decision and its cross-doc consequences.
 
 ### Where the round-progression rule now lives (recorded)
 
-The **round-close gate** (item 3) and the **round-bounded correction window**
-(item 2) are a **cross-cutting round-progression rule**. Per the user's decision
+The **round-close gate** (item 3) and the **group-bounded correction window**
+(item 2, as amended by D11) are a **cross-cutting round-progression rule**. Per the user's decision
 it has now been recorded authoritatively so these Scorer stories *consume* it
 rather than being its only home:
 

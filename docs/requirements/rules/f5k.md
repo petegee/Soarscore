@@ -82,6 +82,9 @@ Round score = the normalised group score (one task per round).
 
 ## 5. Final classification (`5.5.10.16–10.18`)
 
+- **No minimum-rounds validity rule is defined for F5K** — section `5.5.10`
+  states none (extraction-checked 2026-07-08 against the source text); contest
+  validity at low round counts is the Contest Director's judgement.
 - Final = **sum of the normalised round scores**. If **7 or more** rounds are flown,
   the **lowest is dropped**. The signed score cards are the sole basis for results.
 - **Tie:** best dropped score decides; if still tied, a one-task tie-break fly-off.
