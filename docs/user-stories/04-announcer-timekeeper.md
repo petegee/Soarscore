@@ -198,7 +198,8 @@ reminders are configurable. No spoken wording, language or sound is prescribed h
 
 **As an** Announcer / Timekeeper, **I want** a big, bright, daylight-readable board
 showing the current round, group, phase and remaining time, **so that** everyone on
-the field can see where the group is at a glance without crowding the base station.
+the field can see where the group is at a glance without crowding the
+operators' companion-app screen (the Base Station itself is headless).
 
 **Acceptance criteria**
 - [ ] Given a group is current, when the board is shown, then it presents the

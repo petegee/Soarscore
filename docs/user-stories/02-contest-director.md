@@ -461,7 +461,9 @@ contravening the fixed working-time and landing-window durations.
   because not every pilot has a confirming device
   ([5.0.4](03-scorer.md#504--pre-group-confirmation-guard-blocks-entry-until-re-confirmed)),
   when the blocking device is shown as **offline** (its sync-state indicator on
-  the Base Station group view) and I release the gate as **"device offline"**,
+  the base's group view, displayed on my companion client —
+  [companion-app.md §3.2](../requirements/companion-app.md#32-run-control--contest-director-65))
+  and I release the gate as **"device offline"**,
   then the group proceeds with **no no-score** — the device's buffered
   confirmation reconciles when it syncs
   ([scorer-device.md §4](../requirements/scorer-device.md#4-prep-gate-vs-an-offline-device-a1)).

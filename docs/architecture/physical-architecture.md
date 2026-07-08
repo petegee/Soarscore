@@ -155,6 +155,15 @@ Wi-Fi. It is a **client of the base, never an authority**: all state and the
 event log live on the base, so the laptop can arrive, leave, sleep or fail
 without stopping a running group.
 
+*(Owner-decided 2026-07-08.)* The companion app is a **base-served web
+app** — the base's web server serves the operator UI to any
+browser-equipped client, so nothing is installed and any spare laptop is a
+replacement. There is **one app for all operator hats**, with role-oriented
+views and an unauthenticated operator **name-pick** stamping the event
+log's actor-identity field; the **run-control view works at phone size**,
+so the Contest Director's phone is a valid flight-line client. Full
+requirements: [companion-app.md](../requirements/companion-app.md).
+
 **Responsibilities (the humans' window into the base)**
 
 - **Organiser**: master data, competition setup and configuration
@@ -170,7 +179,9 @@ without stopping a running group.
   a companion client's screen — the master laptop's, or a second connected
   client's (see Implications).
 - **Publishing when internet exists** (D6) — the laptop is the only machine
-  that ever touches the internet; the base never does.
+  that ever touches the internet; the base never does. Being base-served,
+  the app **exports results to the operator's machine**, which publishes
+  over its own connection.
 
 **Implications**
 
@@ -271,11 +282,12 @@ need.
 
 ## Open items
 
-1. **Run-control without the laptop** — is a second, smaller client (e.g.
-   the CD's phone browsing an operator page served by the base) wanted for
-   flight-line run-control, or does the laptop simply live at the flight
-   line? The base already serves pages for pilots, so an operator page is
-   cheap — but it widens the trust surface of an auth-less system (D1).
+1. ~~**Run-control without the laptop**~~ — **resolved 2026-07-08**: the
+   companion app is base-served and its run-control view works at phone
+   size, so the CD's phone is a flight-line client (§5). The trust-surface
+   concern is answered by the operator name-pick attribution
+   ([decisions.md D4](../requirements/decisions.md#d4--immutable-event-log)),
+   consistent with D1's no-auth stance.
 2. **Board technology and drive interface** — LED matrix vs. high-bright
    monitor; video vs. serial. A prototyping decision; feeds the power
    budget.

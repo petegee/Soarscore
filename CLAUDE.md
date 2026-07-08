@@ -37,6 +37,9 @@ docs/requirements/
   scorer-device.md             Scorer handheld requirements (capture model,
                                on-device/base split, sync, fleet). Draft with
                                OPEN questions.
+  companion-app.md             Companion-app (operator client) requirements:
+                               one app for all operator hats, role views,
+                               name-pick identity. Draft with OPEN items.
   rules/                        Scoring/running rules the software must enforce
     00-general-rules.md         Cross-class rules (draw, timing, scoring, penalties)
     f3-general-rules.md         F3 family shared rules

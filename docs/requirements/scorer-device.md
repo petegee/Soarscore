@@ -172,7 +172,9 @@ Not everything belongs on a ~1.3-inch round screen. Proposed split:
   device), and the base **rejects a second device confirming an
   already-claimed pilot** — the rejecting device tells its Scorer "pilot
   already claimed" so they pick the right one. Re-selecting away frees the
-  claim; the base group view shows which device holds which pilot
+  claim; the base's group view — displayed on a companion client
+  ([companion-app.md §3.2](companion-app.md#32-run-control--contest-director-65)) —
+  shows which device holds which pilot
   ([5.0](high-level-requirements.md#area-5--scoring)).
 - **No-look operation for the time-critical path:** start/stop must be
   operable by feel with eyes on the model. Everything else (landing entry,
@@ -297,8 +299,10 @@ are **flagged** for the CD validation pass, never presented as exact.
   competition-start push (§1) — no field-side pairing ceremony.
 - **Firmware updates without internet** — the Base Station serves updates
   (consistent with D6).
-- A **device health view** on the base: battery level, sync state, firmware
-  version, currently-selected pilot (also serves Section 4's indicator).
+- A **device health view**, computed by the base and displayed on a
+  companion client ([companion-app.md §3.8](companion-app.md#38-fleet-support-scorer-devicemd-8)):
+  battery level, sync state, firmware version, currently-selected pilot
+  (also serves Section 4's indicator).
 
 ---
 

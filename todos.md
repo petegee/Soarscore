@@ -9,7 +9,7 @@ This is a list of thoughts, issues, ammendments, alterations that have cropped u
 - [x] Ability to fast-forward prep time
 - [x] Ability to add time to prep time
 - [x] CD needs to check scores for anomolies at the end before final report — captured as the CD end-of-contest validation pass gating Lock (2.2) plus manual entry/override (5.8) in high-level-requirements.md; see decisions.md D3
-- [x] Need requirements for companion app - ensure we also add OIDC log-in against competitor list? to capture identity of changer — identity capture is a recorded Future Enhancement; the event log carries an actor-identity field defaulting "unknown" in the MVP (decisions.md D4)
+- [x] Need requirements for companion app - ensure we also add OIDC log-in against competitor list? to capture identity of changer — companion app drafted in docs/requirements/companion-app.md; identity of changer is captured in the MVP by an unauthenticated operator name-pick on companion clients (decisions.md D4, amended 2026-07-08); OIDC/authentication proper stays a Future Enhancement (conflicts with offline-first unless an IdP runs on the base)
 - [ ] 
 - [ ] 
 - [ ] 

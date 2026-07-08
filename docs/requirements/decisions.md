@@ -17,8 +17,11 @@ groups access.
 **Consequences**
 - No user authentication, no Scorer identity capture, and no physical or
   electronic score sign-off in the MVP. (The event log still carries an
-  **actor-identity field** on every event, defaulted to "unknown" — how it
-  is populated is post-MVP; see [D4](#d4--immutable-event-log).)
+  **actor-identity field** on every event; see
+  [D4](#d4--immutable-event-log). *Amended 2026-07-08:* on **companion-app
+  clients** the field is populated by an unauthenticated operator
+  **name-pick** — identity capture, not authentication; on Scorer devices
+  it remains "unknown". See [D4 attribution](#d4--immutable-event-log).)
 - The FAI signed-score-card rule
   ([general-rules §2](rules/00-general-rules.md#2-data-the-timer--helper-collects)
   — an unsigned card scores zero in classes that require it) is **consciously
@@ -59,8 +62,9 @@ on the device itself, not transcribed from a separate watch.
 ## D3 — Failure policy: pen and paper, reconcile at the base
 
 At **any point of system failure**, the field reverts to **pen and paper**;
-results are manually entered into the Base Station afterwards to compute final
-standings and reports. At the end of the contest the Contest Director (or
+results are manually entered into the Base Station afterwards — via the
+companion app's manual entry ([companion-app.md §3.5](companion-app.md#35-manual-entry-and-the-paper-fallback--any-operator-58-d3));
+the base itself is headless — to compute final standings and reports. At the end of the contest the Contest Director (or
 Organiser under CD authority) **validates the entered scores**, manually enters
 missing scores, and overrides entered scores known to be incorrect.
 
@@ -91,13 +95,22 @@ backup — including a minimal mirror-to-companion-client — stays a
 Printing round results as the contest proceeds ([7.1](high-level-requirements.md#area-7--reports))
 is the informal paper hedge.
 
-**Attribution** *(decided 2026-07-08)*: wherever the requirements say an
-action is "attributable", it means the event carries the **originating
-client** (device/laptop), the **authority under which the action was taken**
-(e.g. a Contest-Director action), and an **actor-identity field**. How that
-identity is obtained (login, initials, device pairing) is **deferred beyond
-the MVP** — in the MVP the field defaults to **"unknown"**, consistent with
-D1's no-auth stance, and the small trusted group resolves names from memory.
+**Attribution** *(decided 2026-07-08; identity amended later the same
+day)*: wherever the requirements say an action is "attributable", it means
+the event carries the **originating client** (device/laptop), the
+**authority under which the action was taken** (e.g. a Contest-Director
+action), and an **actor-identity field**. On **companion-app clients** the
+field is populated by a lightweight **operator name-pick** — a "who is
+operating?" selection from a people list, changeable at any time, with
+**no password or verification** (identity capture, not authentication —
+D1's no-auth stance stands; see
+[companion-app.md §1](companion-app.md#1-role-and-shape-d8)). On **Scorer
+devices** the field defaults to **"unknown"** — attribution there is by
+originating device, and Scorer identity capture stays a
+[Future Enhancement](high-level-requirements.md#future-enhancements).
+**Authentication** of any kind (login, OIDC) remains deferred; note OIDC
+conflicts with offline-first operation ([D6](#d6--offline-first-buffer-and-sync-publish-when-connected))
+unless an identity provider runs locally.
 
 ## D5 — End of working time does not stop the device stopwatch
 
@@ -164,6 +177,23 @@ app. Full detail and implications:
 - Pilot-phone and laptop traffic must not be able to degrade the
   scorer-device link.
 - The base is a deliberate single point of failure — D3 is the answer.
+- *(Added 2026-07-08.)* There is **one companion app** serving all the
+  operator hats (Organiser, Contest Director, Announcer/Timekeeper) through
+  **role-oriented views**, with no per-role apps and no enforced
+  authorisation in the MVP — the hats swap freely at club scale
+  ([users.md](users.md)). **Scorers and pilots have no companion-app write
+  path**: Scorers interact only through their handhelds (D2), pilots only
+  through the read-only page; a pilot or Scorer needing a closed-group
+  correction **asks the Contest Director**, who makes it via the companion
+  app's score administration ([D11](#d11--the-devices-scope-is-the-current-group)).
+  Detail: [companion-app.md](companion-app.md).
+- *(Added 2026-07-08.)* The companion app is a **base-served web app**: the
+  base's web server serves the operator UI to any browser-equipped client —
+  nothing to install, so any spare laptop takes over. The **run-control
+  view must work at phone size**, giving the Contest Director a flight-line
+  client on a phone. Publishing (D6) works by the app **exporting results
+  to the operator's machine**, which publishes over its own internet
+  connection — the base still never touches the internet.
 
 ## D9 — Per-flight timestamps on the base clock
 
