@@ -3,6 +3,7 @@ import type { Competition } from "@soarscore/shared";
 import { apiRequest, ApiError } from "../api/client.js";
 import type { Actor } from "../identity/useActor.js";
 import { CompetitionForm, type CompetitionSubmitValues } from "./CompetitionForm.js";
+import { RosterView } from "../roster/RosterView.js";
 
 interface EditState {
   competition?: Competition;
@@ -118,6 +119,12 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
         throw error;
       }
     }
+  }
+
+  if (openId) {
+    // The opened competition's roster screen (STORY-001-005). "Open" remains a
+    // client-side selection only (D8).
+    return <RosterView competitionId={openId} actor={actor} onBack={() => setOpenId(null)} />;
   }
 
   if (editState) {

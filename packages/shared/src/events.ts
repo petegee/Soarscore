@@ -1,6 +1,7 @@
 import type { Pilot } from "./pilot.js";
 import type { LandingBonusEntry, LandingBonusTable } from "./landing-table.js";
 import type { Competition, Discipline } from "./competition.js";
+import type { RosterEntry } from "./roster.js";
 
 export type PilotEventType = "pilot.created" | "pilot.updated" | "pilot.deleted";
 
@@ -90,6 +91,58 @@ export type CompetitionEventPayload =
   | CompetitionCreatedPayload
   | CompetitionUpdatedPayload
   | CompetitionDeletedPayload;
+
+// Roster events are the first per-competition content events: they file under
+// scope = competitionId (the model the competition projection's comment
+// promises), never under the fixed "competitions" / "master-data" scopes.
+export type RosterEventType =
+  | "roster.entryAdded"
+  | "roster.entryUpdated"
+  | "roster.entryRemoved"
+  | "roster.entryReplaced";
+
+export interface RosterEntryAddedPayload {
+  id: string;
+  competitionId: string;
+  pilotId: string;
+  pilotNumber: number | null;
+  pilotClass: string | null;
+}
+
+export type RosterEntryUpdatedPayload = RosterEntryAddedPayload;
+
+export interface RosterEntryRemovedPayload {
+  rosterEntryId: string;
+  competitionId: string;
+}
+
+// Same entry id, new occupant (RD4) — the seat is stable and every draw slot
+// keyed on it is inherited. previousPilotId keeps the prior occupant visible
+// in the immutable log (D4); attributes are the state after the swap.
+export interface RosterEntryReplacedPayload {
+  rosterEntryId: string;
+  competitionId: string;
+  previousPilotId: string;
+  pilotId: string;
+  pilotNumber: number | null;
+  pilotClass: string | null;
+}
+
+export type RosterEventPayload =
+  | RosterEntryAddedPayload
+  | RosterEntryUpdatedPayload
+  | RosterEntryRemovedPayload
+  | RosterEntryReplacedPayload;
+
+export function rosterEntryToPayload(entry: RosterEntry): RosterEntryAddedPayload {
+  return {
+    id: entry.id,
+    competitionId: entry.competitionId,
+    pilotId: entry.pilotId,
+    pilotNumber: entry.pilotNumber,
+    pilotClass: entry.pilotClass,
+  };
+}
 
 export function competitionToCreatedPayload(
   competition: Competition,

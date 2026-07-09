@@ -5,7 +5,7 @@ import fastifyStatic from "@fastify/static";
 import type { ErrorResponse } from "@soarscore/shared";
 import { EventStore } from "./eventstore/event-store.js";
 import { PilotLibraryProjection } from "./pilots/projection.js";
-import { NoRostersYetChecker, type RosterReferenceChecker } from "./pilots/roster-reference-checker.js";
+import type { RosterReferenceChecker } from "./pilots/roster-reference-checker.js";
 import { PilotService } from "./pilots/service.js";
 import { DomainError, NotFoundError, ReferencedPilotError, ValidationError } from "./pilots/errors.js";
 import { LandingTableProjection } from "./landing-tables/projection.js";
@@ -29,7 +29,27 @@ import {
   CompetitionLockedError,
   CompetitionNotFoundError,
 } from "./competitions/errors.js";
+import { RosterProjection } from "./roster/projection.js";
+import {
+  NoAcceptedDrawProvider,
+  NoEntryScoresYetProvider,
+  NothingRetiredProvider,
+  type DrawStateProvider,
+  type EntryScoresProvider,
+  type RetirementStateProvider,
+} from "./roster/state-providers.js";
+import { RosterService } from "./roster/service.js";
+import { ProjectionRosterReferenceChecker } from "./roster/roster-reference-checker.js";
+import {
+  DuplicateRosterEntryError,
+  RosterEntryHasFlownError,
+  RosterEntryNotFoundError,
+  RosterEntryRetiredError,
+  RosterRemoveRequiresReplacementError,
+  RosterReplaceNeedsConfirmationError,
+} from "./roster/errors.js";
 import { registerPilotRoutes } from "./routes/pilots.js";
+import { registerRosterRoutes } from "./routes/roster.js";
 import { registerLandingTableRoutes } from "./routes/landing-tables.js";
 import { registerCompetitionRoutes } from "./routes/competitions.js";
 import { registerHealthRoute } from "./routes/health.js";
@@ -39,8 +59,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export interface AppOptions {
   dbPath: string;
   serveStatic?: boolean;
-  // Test seam: STORY-001-005 will supply a real checker; production always
-  // uses NoRostersYetChecker until rosters exist.
+  // Override seam (tests): production now defaults to the roster-backed
+  // ProjectionRosterReferenceChecker (STORY-001-005 / RD1).
   referenceChecker?: RosterReferenceChecker;
   // Test seam: STORY-001-008 will supply a real checker; production always
   // uses NoTaskConfigYetChecker until task scoring config exists.
@@ -51,6 +71,15 @@ export interface AppOptions {
   // Test seam: the scoring story will supply a real provider; production always
   // uses NoScoresYetProvider until captured scores exist.
   capturedScoresProvider?: CapturedScoresProvider;
+  // Test seam: STORY-001-009 will supply a real provider; production always
+  // uses NoAcceptedDrawProvider until draws exist.
+  drawStateProvider?: DrawStateProvider;
+  // Test seam: Area 5.5 will supply a real provider; production always uses
+  // NothingRetiredProvider until CD retirement exists.
+  retirementStateProvider?: RetirementStateProvider;
+  // Test seam: the scoring story will supply a real provider; production
+  // always uses NoEntryScoresYetProvider until captured scores exist.
+  entryScoresProvider?: EntryScoresProvider;
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
@@ -62,24 +91,30 @@ export function buildApp(options: AppOptions): FastifyInstance {
       "event appended",
     );
   });
+  // Projections first: the pilot service's default reference checker answers
+  // from roster + competition state (RD1).
   const projection = new PilotLibraryProjection();
   projection.rebuild(eventStore.readAll());
+  const landingTableProjection = new LandingTableProjection();
+  landingTableProjection.rebuild(eventStore.readAll());
+  const competitionProjection = new CompetitionProjection();
+  competitionProjection.rebuild(eventStore.readAll());
+  const rosterProjection = new RosterProjection();
+  rosterProjection.rebuild(eventStore.readAll());
+
   const pilotService = new PilotService(
     eventStore,
     projection,
-    options.referenceChecker ?? new NoRostersYetChecker(),
+    options.referenceChecker ??
+      new ProjectionRosterReferenceChecker(rosterProjection, competitionProjection),
   );
 
-  const landingTableProjection = new LandingTableProjection();
-  landingTableProjection.rebuild(eventStore.readAll());
   const landingTableService = new LandingTableService(
     eventStore,
     landingTableProjection,
     options.landingTableReferenceChecker ?? new NoTaskConfigYetChecker(),
   );
 
-  const competitionProjection = new CompetitionProjection();
-  competitionProjection.rebuild(eventStore.readAll());
   const competitionService = new CompetitionService(
     eventStore,
     competitionProjection,
@@ -87,10 +122,21 @@ export function buildApp(options: AppOptions): FastifyInstance {
     options.capturedScoresProvider ?? new NoScoresYetProvider(),
   );
 
+  const rosterService = new RosterService(
+    eventStore,
+    rosterProjection,
+    competitionProjection,
+    projection,
+    options.drawStateProvider ?? new NoAcceptedDrawProvider(),
+    options.retirementStateProvider ?? new NothingRetiredProvider(),
+    options.entryScoresProvider ?? new NoEntryScoresYetProvider(),
+  );
+
   registerHealthRoute(app);
   registerPilotRoutes(app, pilotService);
   registerLandingTableRoutes(app, landingTableService);
   registerCompetitionRoutes(app, competitionService);
+  registerRosterRoutes(app, rosterService);
 
   if (options.serveStatic) {
     app.register(fastifyStatic, {
@@ -155,6 +201,42 @@ export function buildApp(options: AppOptions): FastifyInstance {
       return;
     }
     if (error instanceof CompetitionDisciplineLockedError) {
+      reply.code(409).send({
+        code: error.code,
+        message: error.message,
+        details: { reason: error.reason },
+      } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof RosterEntryNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof DuplicateRosterEntryError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof RosterEntryRetiredError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof RosterRemoveRequiresReplacementError) {
+      reply.code(409).send({
+        code: error.code,
+        message: error.message,
+        details: { reason: error.reason },
+      } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof RosterReplaceNeedsConfirmationError) {
+      reply.code(409).send({
+        code: error.code,
+        message: error.message,
+        details: { reason: error.reason },
+      } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof RosterEntryHasFlownError) {
       reply.code(409).send({
         code: error.code,
         message: error.message,
