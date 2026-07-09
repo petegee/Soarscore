@@ -4,8 +4,9 @@ import { NamePickPrompt } from "./identity/NamePickPrompt.js";
 import { PilotLibrary } from "./pilots/PilotLibrary.js";
 import { LandingTableLibrary } from "./landing-tables/LandingTableLibrary.js";
 import { CompetitionLibrary } from "./competitions/CompetitionLibrary.js";
+import { TemplateLibrary } from "./templates/TemplateLibrary.js";
 
-type Screen = "competitions" | "pilots" | "landing-tables";
+type Screen = "competitions" | "templates" | "pilots" | "landing-tables";
 
 export function App() {
   const actor = useActor();
@@ -36,6 +37,9 @@ export function App() {
         >
           Competitions
         </button>
+        <button onClick={() => setScreen("templates")} disabled={screen === "templates"}>
+          Templates
+        </button>
         <button onClick={() => setScreen("pilots")} disabled={screen === "pilots"}>
           Pilots
         </button>
@@ -48,6 +52,7 @@ export function App() {
       </nav>
       <main className="screen">
         {screen === "competitions" && <CompetitionLibrary actor={actor} />}
+        {screen === "templates" && <TemplateLibrary actor={actor} />}
         {screen === "pilots" && <PilotLibrary actor={actor} />}
         {screen === "landing-tables" && <LandingTableLibrary actor={actor} />}
       </main>

@@ -1,6 +1,7 @@
 import type { Pilot } from "./pilot.js";
 import type { LandingBonusEntry, LandingBonusTable } from "./landing-table.js";
 import type { Competition, Discipline } from "./competition.js";
+import type { ContestTemplate } from "./contest-template.js";
 import type { RosterEntry } from "./roster.js";
 
 export type PilotEventType = "pilot.created" | "pilot.updated" | "pilot.deleted";
@@ -141,6 +142,55 @@ export function rosterEntryToPayload(entry: RosterEntry): RosterEntryAddedPayloa
     pilotId: entry.pilotId,
     pilotNumber: entry.pilotNumber,
     pilotClass: entry.pilotClass,
+  };
+}
+
+export type ContestTemplateEventType =
+  | "contestTemplate.created"
+  | "contestTemplate.updated"
+  | "contestTemplate.deleted"
+  | "contestTemplate.seeded";
+
+export interface ContestTemplateCreatedPayload {
+  id: string;
+  name: string;
+  discipline: Discipline;
+  pilotNumbersEnabled: boolean;
+  pilotClassesEnabled: boolean;
+  pilotClasses: string[];
+}
+
+export type ContestTemplateUpdatedPayload = ContestTemplateCreatedPayload;
+
+export interface ContestTemplateDeletedPayload {
+  templateId: string;
+}
+
+// Audit-only provenance (RD4): no projection consumes it — the seeded
+// competition carries no template reference. templateName is denormalised so
+// the log stays meaningful after the template is deleted.
+export interface ContestTemplateSeededPayload {
+  templateId: string;
+  templateName: string;
+  competitionId: string;
+}
+
+export type ContestTemplateEventPayload =
+  | ContestTemplateCreatedPayload
+  | ContestTemplateUpdatedPayload
+  | ContestTemplateDeletedPayload
+  | ContestTemplateSeededPayload;
+
+export function contestTemplateToCreatedPayload(
+  template: ContestTemplate,
+): ContestTemplateCreatedPayload {
+  return {
+    id: template.id,
+    name: template.name,
+    discipline: template.discipline,
+    pilotNumbersEnabled: template.pilotNumbersEnabled,
+    pilotClassesEnabled: template.pilotClassesEnabled,
+    pilotClasses: [...template.pilotClasses],
   };
 }
 

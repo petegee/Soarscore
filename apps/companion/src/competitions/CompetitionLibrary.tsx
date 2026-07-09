@@ -19,6 +19,15 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Competition | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // "Save as template" capture dialog (AC1): name only — configuration is
+  // copied from the competition on the base.
+  const [saveAsTemplate, setSaveAsTemplate] = useState<{
+    competition: Competition;
+    name: string;
+  } | null>(null);
+  const [saveAsTemplateErrors, setSaveAsTemplateErrors] = useState<
+    Record<string, string[]> | undefined
+  >();
   // Escalated once the base reports captured scores — a stronger, consequence
   // naming confirmation that re-issues DELETE with the acknowledgment flag.
   const [needsConfirm, setNeedsConfirm] = useState(false);
@@ -74,6 +83,26 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
         }
         const details = error.response.details as { fieldErrors?: Record<string, string[]> } | undefined;
         setFieldErrors(details?.fieldErrors ?? { name: [error.response.message] });
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  async function confirmSaveAsTemplate(pending: { competition: Competition; name: string }) {
+    setSaveAsTemplateErrors(undefined);
+    try {
+      await apiRequest(`/api/competitions/${pending.competition.id}/save-as-template`, {
+        method: "POST",
+        body: { name: pending.name },
+        actorName,
+        clientId: actor.clientId,
+      });
+      setSaveAsTemplate(null);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        const details = error.response.details as { fieldErrors?: Record<string, string[]> } | undefined;
+        setSaveAsTemplateErrors(details?.fieldErrors ?? { name: [error.response.message] });
       } else {
         throw error;
       }
@@ -190,6 +219,15 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
                         Edit
                       </button>
                       <button
+                        className="btn btn-small"
+                        onClick={() => {
+                          setSaveAsTemplate({ competition, name: "" });
+                          setSaveAsTemplateErrors(undefined);
+                        }}
+                      >
+                        Save as template
+                      </button>
+                      <button
                         className="btn btn-small btn-danger"
                         onClick={() => startDelete(competition)}
                       >
@@ -201,6 +239,49 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {saveAsTemplate && (
+        <div className="dialog-backdrop">
+          <div role="dialog" className="dialog">
+            <p>Save {saveAsTemplate.competition.name} as a template</p>
+
+            <label htmlFor="save-as-template-name">Template name (required)</label>
+            <input
+              id="save-as-template-name"
+              value={saveAsTemplate.name}
+              onChange={(event) =>
+                setSaveAsTemplate((current) => current && { ...current, name: event.target.value })
+              }
+              required
+            />
+            {saveAsTemplateErrors?.name && (
+              <p role="alert" className="field-error">
+                {saveAsTemplateErrors.name.join(", ")}
+              </p>
+            )}
+
+            <div className="form-actions">
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  confirmSaveAsTemplate(saveAsTemplate);
+                }}
+              >
+                Save template
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  setSaveAsTemplate(null);
+                  setSaveAsTemplateErrors(undefined);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

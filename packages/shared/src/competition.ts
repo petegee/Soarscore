@@ -34,7 +34,8 @@ function dedupeClasses(names: string[]): string[] {
 
 // Cross-field rule: an enabled pilot-classes toggle requires ≥1 usable name;
 // evaluated against the deduped set so "Open, open" still counts as one.
-function pilotClassesRefinement(
+// Exported so the contest-template schema enforces the same invariant.
+export function pilotClassesRefinement(
   value: { pilotClassesEnabled: boolean; pilotClasses: string[] },
   ctx: z.RefinementCtx,
 ): void {
@@ -49,7 +50,8 @@ function pilotClassesRefinement(
 
 // Normalise the allowed-name set: deduped when enabled, discarded to [] when
 // disabled (RD4) so a toggled-off competition never carries a stale set.
-function normalisePilotClasses<
+// Exported so the contest-template schema normalises the same way.
+export function normalisePilotClasses<
   T extends { pilotClassesEnabled: boolean; pilotClasses: string[] },
 >(value: T): T {
   return {
@@ -58,11 +60,10 @@ function normalisePilotClasses<
   };
 }
 
-// Identity + discipline + entry-option fields shared by create and update
-// (whole-aggregate update — RD5). Mirrors the landing-table field style: trim +
-// required + field-named messages so flatten().fieldErrors names the offending
-// field.
-const competitionFields = {
+// Per-event identity fields (name/date/venue) — everything a contest template
+// must NOT capture. Mirrors the landing-table field style: trim + required +
+// field-named messages so flatten().fieldErrors names the offending field.
+export const competitionIdentityFields = {
   name: z
     .string()
     .transform((value) => value.trim())
@@ -83,6 +84,12 @@ const competitionFields = {
     .transform((value) => (value.length ? value : null))
     .nullable()
     .optional(),
+};
+
+// Configuration fields — the contest-template snapshot surface. Any field
+// added here must be added to the template snapshot and seed mapping in the
+// same change (STORY-001-007/008/009 obligation).
+export const competitionConfigurationFields = {
   // Required on both create and update (RD1); a competition never exists without
   // one. The single errorMap covers a missing value and an unknown code alike.
   discipline: z.enum(DISCIPLINES, {
@@ -106,12 +113,12 @@ const competitionFields = {
 // Both schemas compose the same fields (RD5), then apply the cross-field
 // pilot-classes rule and normalisation.
 export const createCompetitionRequestSchema = z
-  .object(competitionFields)
+  .object({ ...competitionIdentityFields, ...competitionConfigurationFields })
   .superRefine(pilotClassesRefinement)
   .transform(normalisePilotClasses);
 
 export const updateCompetitionRequestSchema = z
-  .object(competitionFields)
+  .object({ ...competitionIdentityFields, ...competitionConfigurationFields })
   .superRefine(pilotClassesRefinement)
   .transform(normalisePilotClasses);
 

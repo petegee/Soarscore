@@ -29,6 +29,9 @@ import {
   CompetitionLockedError,
   CompetitionNotFoundError,
 } from "./competitions/errors.js";
+import { TemplateProjection } from "./templates/projection.js";
+import { TemplateService } from "./templates/service.js";
+import { TemplateNotFoundError } from "./templates/errors.js";
 import { RosterProjection } from "./roster/projection.js";
 import {
   NoAcceptedDrawProvider,
@@ -52,6 +55,7 @@ import { registerPilotRoutes } from "./routes/pilots.js";
 import { registerRosterRoutes } from "./routes/roster.js";
 import { registerLandingTableRoutes } from "./routes/landing-tables.js";
 import { registerCompetitionRoutes } from "./routes/competitions.js";
+import { registerTemplateRoutes } from "./routes/templates.js";
 import { registerHealthRoute } from "./routes/health.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +105,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
   competitionProjection.rebuild(eventStore.readAll());
   const rosterProjection = new RosterProjection();
   rosterProjection.rebuild(eventStore.readAll());
+  const templateProjection = new TemplateProjection();
+  templateProjection.rebuild(eventStore.readAll());
 
   const pilotService = new PilotService(
     eventStore,
@@ -122,6 +128,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
     options.capturedScoresProvider ?? new NoScoresYetProvider(),
   );
 
+  // After CompetitionService: the seed path delegates competition creation to
+  // it (single writer of competition state).
+  const templateService = new TemplateService(
+    eventStore,
+    templateProjection,
+    competitionProjection,
+    competitionService,
+  );
+
   const rosterService = new RosterService(
     eventStore,
     rosterProjection,
@@ -136,6 +151,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   registerPilotRoutes(app, pilotService);
   registerLandingTableRoutes(app, landingTableService);
   registerCompetitionRoutes(app, competitionService);
+  registerTemplateRoutes(app, templateService);
   registerRosterRoutes(app, rosterService);
 
   if (options.serveStatic) {
@@ -206,6 +222,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
         message: error.message,
         details: { reason: error.reason },
       } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof TemplateNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }
     if (error instanceof RosterEntryNotFoundError) {
