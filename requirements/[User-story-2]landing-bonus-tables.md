@@ -1,5 +1,15 @@
 # [STORY-001-002] Reusable Landing-Bonus Table Management
 
+> **⚠ Superseded by [STORY-001-016] (Contest Class Model) — see decision D12
+> (2026-07-10).** Landing tables are no longer free-floating master data
+> selected per competition; a Contest Class Model **owns its landing table
+> outright**. Table management retires into cloning-and-editing a class model.
+> This story's shipped code and events remain valid history (D4 immutable log)
+> and are repurposed, not purged — the CRUD/referential-protection machinery
+> becomes table management *within* class definitions. Read the ACs below as
+> the original scope; STORY-001-016 is authoritative now. Struck-through text
+> marks what D12 reverses.
+
 > Source: `docs/user-stories/01-organiser.md` §1.2 · `docs/requirements/high-level-requirements.md` Area 1.2
 > Module: 001 (Organiser MVP) · Estimated effort: **2 days**
 
@@ -10,13 +20,13 @@ nose comes to rest from an allocated landing spot. Each class's rules mandate
 a specific distance→points table (e.g. F3J's table runs from 100 points at
 ≤ 0.2 m down to 0 beyond 15 m; F5J's coarser table runs 50 points at ≤ 1 m
 down to 0 beyond 10 m). The Organiser needs to define these tables once, as
-named master data, and let any competition select one — without re-keying the
+named master data, ~~and let any competition select one~~ — without re-keying the
 table per event and without needing to understand the scoring maths.
 
 ### Business Value
 
-- Provide the Organiser with named, reusable distance→points tables selectable
-  by any competition.
+- Provide the Organiser with named, reusable distance→points tables ~~selectable
+  by any competition~~ (now owned by a class model — D12).
 - Support correct landing-bonus scoring in the classes that use landings
   (F3B, F3J, F5J, F5L) without per-event re-entry.
 - Enable safe table maintenance without corrupting competitions that already

@@ -3,6 +3,16 @@
 > Source: `docs/user-stories/01-organiser.md` §3.6 · `docs/requirements/high-level-requirements.md` Area 3.6 · `docs/requirements/rules/00-general-rules.md` §3–§6
 > Module: 001 (Organiser MVP) · Estimated effort: **4 days**
 
+> **Reshaped by D12 / STORY-001-016.** Scoring configuration and the
+> deviation guardrail (AC1–AC4) are **delivered by the Contest Class Model** —
+> defaults are the stock model's values; a deviation is a named custom clone,
+> not a per-field warning here. This story narrows to the **computation
+> behaviours** that read a model and produce results: penalty retention
+> through drop-worst (AC5) and the shared degenerate cases (AC6–AC8). AC1–AC4
+> remain as the behavioural spec the model must satisfy, now owned by 016.
+> Effort narrows accordingly (~2 days). A fresh `/spdd-analysis` supersedes the
+> pre-pivot analysis file for this story.
+
 ### Background
 
 Final results must compute correctly for the discipline without the Organiser
@@ -27,7 +37,8 @@ the FAI rule.
 
 ### Dependencies and Assumptions
 
-- **Prerequisites**: STORY-001-004 (discipline selected).
+- **Prerequisites**: STORY-001-004 (discipline selected), STORY-001-016
+  (the Contest Class Model supplying scoring defaults and deviations).
 - **Data assumptions**: class-rule numbers come from
   `docs/requirements/rules/` (authoritative, read-only): e.g. drop-worst
   thresholds — F5J more than 4 rounds, F5L more than 5, F3K from 6, F5K from

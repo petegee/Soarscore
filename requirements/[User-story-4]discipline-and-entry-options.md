@@ -3,6 +3,12 @@
 > Source: `docs/user-stories/01-organiser.md` §3.2, §3.3 · `docs/requirements/high-level-requirements.md` Areas 3.2, 3.3
 > Module: 001 (Organiser MVP) · Estimated effort: **2 days**
 
+> **Reshaped by D12 / STORY-001-016.** "Selecting a discipline" is now
+> selecting a **Contest Class Model** (a stock model, or a named custom
+> clone). AC1's "tasks and rules become the discipline's" is served by the
+> chosen model; AC2's change-guard guards the **model reference**. Entry
+> options (pilot numbers/classes) are unaffected.
+
 ### Background
 
 A competition's discipline (F3B, F3J, F3K, F5J, F5K or F5L) determines which
@@ -24,7 +30,8 @@ results can be grouped.
 
 ### Dependencies and Assumptions
 
-- **Prerequisites**: STORY-001-003 (a competition exists to configure).
+- **Prerequisites**: STORY-001-003 (a competition exists to configure),
+  STORY-001-016 (the Contest Class Model to select).
 - **Data assumptions**: the six MVP disciplines and their task/rule sets are
   defined by the class rule docs (`docs/requirements/rules/`), which are
   authoritative on numbers.

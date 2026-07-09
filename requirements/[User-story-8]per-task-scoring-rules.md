@@ -3,6 +3,12 @@
 > Source: `docs/user-stories/01-organiser.md` §3.7 · `docs/requirements/high-level-requirements.md` Area 3.7 · `docs/requirements/rules/00-general-rules.md` §2
 > Module: 001 (Organiser MVP) · Estimated effort: **4 days**
 
+> **Reshaped by D12 / STORY-001-016.** Per-task parameters are **additive
+> slots on the Contest Class Model**. AC3's landing table is the **model's
+> owned table** (STORY-001-002's standalone selection is superseded); AC2/AC5
+> defaults come from the model, and a deviation is a custom clone (016), not a
+> per-field warning. The per-event constant (F5K NLH, AC6) is unchanged.
+
 ### Background
 
 Each task a competition flies has parameters that drive both live capture and
@@ -26,8 +32,9 @@ parameter model must already hold every class's numbers correctly.
 
 ### Dependencies and Assumptions
 
-- **Prerequisites**: STORY-001-002 (landing tables), STORY-001-004
-  (discipline), STORY-001-007 (the guardrail pattern for rule-fixed values).
+- **Prerequisites**: STORY-001-016 (the Contest Class Model — owns landing
+  tables and supplies rule-fixed defaults, superseding STORY-001-002),
+  STORY-001-004 (discipline), STORY-001-007 (computation behaviours).
 - **Data assumptions**: class precisions per the rule docs — F3J/F3K 0.1 s
   (F3K truncated); F5J/F5K/F5L and F3B Duration whole seconds; F3B Speed
   1/100 s.

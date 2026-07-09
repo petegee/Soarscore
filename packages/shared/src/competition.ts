@@ -1,10 +1,13 @@
 import { z } from "zod";
 
-// The six FAI classes in MVP scope. Additive-only (NFR): a new class extends
+// The six FAI classes in MVP scope. Additive-only (NFR-2): a new class extends
 // this tuple; the aggregate is never reshaped and existing codes never renamed.
-// Discipline is a *key into* the rule corpus, not a copy of any rule number
-// (house rule 1); it is kept strictly separate from the product-level
-// pilotClasses grouping (house rule 2).
+// Discipline is a *key*, never a copy of a rule number (house rule 1): under
+// D12 a class's numbers — scoring basis, drop-worst, points-per-second,
+// landing table — live in the one derived Contest Class Model (NFR-1), which
+// `discipline` pivots to *reference* (STORY-001-016). This bare enum is the
+// pre-pivot form, retained until that story lands. It is kept strictly
+// separate from the product-level pilotClasses grouping.
 export const DISCIPLINES = ["F3B", "F3J", "F3K", "F5J", "F5K", "F5L"] as const;
 export type Discipline = (typeof DISCIPLINES)[number];
 
