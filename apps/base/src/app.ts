@@ -25,6 +25,7 @@ import {
 import { CompetitionService } from "./competitions/service.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
+  CompetitionDisciplineLockedError,
   CompetitionLockedError,
   CompetitionNotFoundError,
 } from "./competitions/errors.js";
@@ -146,6 +147,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
       return;
     }
     if (error instanceof CompetitionDeleteNeedsConfirmationError) {
+      reply.code(409).send({
+        code: error.code,
+        message: error.message,
+        details: { reason: error.reason },
+      } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof CompetitionDisciplineLockedError) {
       reply.code(409).send({
         code: error.code,
         message: error.message,

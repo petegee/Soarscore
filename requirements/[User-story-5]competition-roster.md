@@ -8,7 +8,7 @@
 The roster is the list of who is flying this competition. It is built from
 the master pilot library so entering an event means picking known pilots, not
 re-typing details. Each roster entry carries this competition's per-entry
-attributes (start number, pilot class — as enabled by the entry options).
+attributes (pilot number, pilot class — as enabled by the entry options).
 Before the draw is generated the roster changes freely; after the draw, a
 withdrawal is handled by replacing the entrant in their existing draw slot
 rather than re-drawing the whole event. Pilots confirm their own entry
@@ -38,7 +38,7 @@ details by reading the roster.
 
 - Add master pilots to a competition as roster entries; remove them freely
   before the draw exists.
-- Edit per-entry attributes (e.g. start number, class) scoped to this
+- Edit per-entry attributes (e.g. pilot number, class) scoped to this
   competition only.
 - Replace an entrant after the draw exists, inheriting the withdrawn pilot's
   draw slot, with a warning.
@@ -57,11 +57,11 @@ details by reading the roster.
 **Given** a pilot library holding 25 pilots and a new competition
 **When** the Organiser adds 14 of them to the competition
 **Then** each becomes a roster entry carrying the per-entry attributes the
-competition's entry options enable (e.g. start number, class).
+competition's entry options enable (e.g. pilot number, class).
 
 #### AC2: Per-entry edits stay in this competition
-**Given** roster entry "Jane Smith" with start number 7 in this competition
-**When** the Organiser changes her start number to 12
+**Given** roster entry "Jane Smith" with pilot number 7 in this competition
+**When** the Organiser changes her pilot number to 12
 **Then** the change applies to this competition only; her master pilot record
 and her entries in other competitions are unchanged.
 

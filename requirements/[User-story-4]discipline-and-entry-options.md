@@ -18,7 +18,7 @@ results can be grouped.
 
 - Provide the Organiser with a single choice that makes all downstream task
   and scoring configuration correct for the class being flown.
-- Support per-event tailoring of entrant attributes (start numbers, pilot
+- Support per-event tailoring of entrant attributes (pilot numbers, pilot
   classes) without carrying fields the event doesn't use.
 - Enable results grouped/ranked by pilot class where the event wants it.
 
@@ -39,7 +39,7 @@ results can be grouped.
 - Select one of the six disciplines for a competition; the available tasks
   and rules become those of that discipline.
 - Guard against discipline changes that would invalidate captured scores.
-- Toggle **start numbers** and **pilot classes** entry options per
+- Toggle **pilot numbers** and **pilot classes** entry options per
   competition.
 
 ### Scope Out
@@ -64,10 +64,10 @@ task catalogue), not those of any other class.
 that states it invalidates task configuration and results — never a silent
 switch.
 
-#### AC3: Start numbers option
-**Given** a competition with the start-numbers option enabled
+#### AC3: Pilot numbers option
+**Given** a competition with the pilot-numbers option enabled
 **When** the Organiser edits the roster and produces the draw or reports
-**Then** each roster entry can carry a start number and it appears in the
+**Then** each roster entry can carry a pilot number and it appears in the
 draw and reports.
 
 #### AC4: Pilot classes option
@@ -77,9 +77,9 @@ assigned classes "Open" and "Sportsman"
 **Then** results can be grouped or ranked by those classes.
 
 #### AC5: Disabled option removes the attribute
-**Given** a competition where the Organiser disables start numbers
+**Given** a competition where the Organiser disables pilot numbers
 **When** the roster is viewed
-**Then** the start-number attribute is no longer required or shown on
+**Then** the pilot-number attribute is no longer required or shown on
 entries.
 
 ### INVEST Check

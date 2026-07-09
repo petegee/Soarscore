@@ -73,7 +73,7 @@ automatically to the right person without my having to look anything up.
   cannot pick someone outside it.
 - [ ] Given the group's pilot list, when I select a competitor, then that
   competitor becomes the device's active selection and is shown prominently
-  (name, and start number / lane where configured) for me to check against the
+  (name, and pilot number / lane where configured) for me to check against the
   pilot beside me.
 - [ ] Given a group with a single lone competitor safeguarded by a dummy
   ([5.3](../requirements/high-level-requirements.md#area-5--scoring)), when I open

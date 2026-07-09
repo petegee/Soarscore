@@ -28,3 +28,16 @@ export class CompetitionDeleteNeedsConfirmationError extends DomainError {
     super(message);
   }
 }
+
+// Hard block (RD2): thrown by update when the discipline differs from the stored
+// one and captured scores exist. There is no acknowledgment flag — a locked
+// competition reuses CompetitionLockedError, checked first.
+export class CompetitionDisciplineLockedError extends DomainError {
+  readonly code = "COMPETITION_DISCIPLINE_LOCKED";
+  constructor(
+    message: string,
+    readonly reason: "captured-scores" = "captured-scores",
+  ) {
+    super(message);
+  }
+}

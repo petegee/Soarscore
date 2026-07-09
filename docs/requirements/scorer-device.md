@@ -449,7 +449,7 @@ Each entry in `fields[]`:
 
 Round number, group number, **task reference for this round** with any
 per-round working-time override (3.7), the **pilot short-list** (id, name,
-start number — §3), the prep-gate state, and the mirrored phase/countdown
+pilot number — §3), the prep-gate state, and the mirrored phase/countdown
 stream (§7). Traces to 5.0 and Area 6.
 
 ### A.5 Worked examples *(illustrative sketch)*

@@ -1,4 +1,4 @@
-import type { Competition } from "@soarscore/shared";
+import type { Competition, Discipline } from "@soarscore/shared";
 import type { EventRecord } from "../eventstore/event-store.js";
 
 // Registry/lifecycle events file under one fixed scope; content events (roster,
@@ -23,12 +23,20 @@ export class CompetitionProjection {
           name: string;
           date: string;
           venue: string | null;
+          discipline: Discipline;
+          pilotNumbersEnabled: boolean;
+          pilotClassesEnabled: boolean;
+          pilotClasses: string[];
         };
         this.competitions.set(payload.id, {
           id: payload.id,
           name: payload.name,
           date: payload.date,
           venue: payload.venue,
+          discipline: payload.discipline,
+          pilotNumbersEnabled: payload.pilotNumbersEnabled,
+          pilotClassesEnabled: payload.pilotClassesEnabled,
+          pilotClasses: payload.pilotClasses,
         });
         break;
       }

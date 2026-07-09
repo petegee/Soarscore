@@ -1,16 +1,67 @@
 import { z } from "zod";
 
+// The six FAI classes in MVP scope. Additive-only (NFR): a new class extends
+// this tuple; the aggregate is never reshaped and existing codes never renamed.
+// Discipline is a *key into* the rule corpus, not a copy of any rule number
+// (house rule 1); it is kept strictly separate from the product-level
+// pilotClasses grouping (house rule 2).
+export const DISCIPLINES = ["F3B", "F3J", "F3K", "F5J", "F5K", "F5L"] as const;
+export type Discipline = (typeof DISCIPLINES)[number];
+
 export interface Competition {
   id: string;
   name: string;
   date: string;
   venue: string | null;
+  discipline: Discipline;
+  pilotNumbersEnabled: boolean;
+  pilotClassesEnabled: boolean;
+  pilotClasses: string[];
 }
 
-// Identity fields shared by create and update (whole-aggregate update). Mirrors
-// the landing-table field style: trim + required + length-bound so
-// flatten().fieldErrors names the offending field. No uniqueness constraint —
-// name is a mutable label over a stable surrogate id (follow precedent).
+// Case-insensitive dedupe that preserves first-seen order and original casing.
+function dedupeClasses(names: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const name of names) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+  return result;
+}
+
+// Cross-field rule: an enabled pilot-classes toggle requires ≥1 usable name;
+// evaluated against the deduped set so "Open, open" still counts as one.
+function pilotClassesRefinement(
+  value: { pilotClassesEnabled: boolean; pilotClasses: string[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.pilotClassesEnabled && dedupeClasses(value.pilotClasses).length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pilotClasses"],
+      message: "At least one pilot class is required",
+    });
+  }
+}
+
+// Normalise the allowed-name set: deduped when enabled, discarded to [] when
+// disabled (RD4) so a toggled-off competition never carries a stale set.
+function normalisePilotClasses<
+  T extends { pilotClassesEnabled: boolean; pilotClasses: string[] },
+>(value: T): T {
+  return {
+    ...value,
+    pilotClasses: value.pilotClassesEnabled ? dedupeClasses(value.pilotClasses) : [],
+  };
+}
+
+// Identity + discipline + entry-option fields shared by create and update
+// (whole-aggregate update — RD5). Mirrors the landing-table field style: trim +
+// required + field-named messages so flatten().fieldErrors names the offending
+// field.
 const competitionFields = {
   name: z
     .string()
@@ -32,10 +83,37 @@ const competitionFields = {
     .transform((value) => (value.length ? value : null))
     .nullable()
     .optional(),
+  // Required on both create and update (RD1); a competition never exists without
+  // one. The single errorMap covers a missing value and an unknown code alike.
+  discipline: z.enum(DISCIPLINES, {
+    errorMap: () => ({ message: "A discipline is required" }),
+  }),
+  // Per-competition entry options; default off so existing callers are additive.
+  pilotNumbersEnabled: z.boolean().default(false),
+  pilotClassesEnabled: z.boolean().default(false),
+  // Allowed pilot-class name set; each name trimmed and non-empty. Cross-field
+  // dedupe / discard is applied at the object level below.
+  pilotClasses: z
+    .array(
+      z
+        .string()
+        .transform((value) => value.trim())
+        .refine((value) => value.length > 0, "Class names cannot be blank"),
+    )
+    .default([]),
 };
 
-export const createCompetitionRequestSchema = z.object(competitionFields);
-export const updateCompetitionRequestSchema = z.object(competitionFields);
+// Both schemas compose the same fields (RD5), then apply the cross-field
+// pilot-classes rule and normalisation.
+export const createCompetitionRequestSchema = z
+  .object(competitionFields)
+  .superRefine(pilotClassesRefinement)
+  .transform(normalisePilotClasses);
+
+export const updateCompetitionRequestSchema = z
+  .object(competitionFields)
+  .superRefine(pilotClassesRefinement)
+  .transform(normalisePilotClasses);
 
 export type CreateCompetitionRequest = z.infer<typeof createCompetitionRequestSchema>;
 export type UpdateCompetitionRequest = z.infer<typeof updateCompetitionRequestSchema>;

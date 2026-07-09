@@ -1,6 +1,6 @@
 import type { Pilot } from "./pilot.js";
 import type { LandingBonusEntry, LandingBonusTable } from "./landing-table.js";
-import type { Competition } from "./competition.js";
+import type { Competition, Discipline } from "./competition.js";
 
 export type PilotEventType = "pilot.created" | "pilot.updated" | "pilot.deleted";
 
@@ -72,6 +72,12 @@ export interface CompetitionCreatedPayload {
   name: string;
   date: string;
   venue: string | null;
+  // Discipline + entry options ride the existing created/updated events (RD5);
+  // there is no dedicated disciplineChanged event.
+  discipline: Discipline;
+  pilotNumbersEnabled: boolean;
+  pilotClassesEnabled: boolean;
+  pilotClasses: string[];
 }
 
 export type CompetitionUpdatedPayload = CompetitionCreatedPayload;
@@ -93,5 +99,9 @@ export function competitionToCreatedPayload(
     name: competition.name,
     date: competition.date,
     venue: competition.venue,
+    discipline: competition.discipline,
+    pilotNumbersEnabled: competition.pilotNumbersEnabled,
+    pilotClassesEnabled: competition.pilotClassesEnabled,
+    pilotClasses: competition.pilotClasses,
   };
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Competition } from "@soarscore/shared";
 import { apiRequest, ApiError } from "../api/client.js";
 import type { Actor } from "../identity/useActor.js";
-import { CompetitionForm } from "./CompetitionForm.js";
+import { CompetitionForm, type CompetitionSubmitValues } from "./CompetitionForm.js";
 
 interface EditState {
   competition?: Competition;
@@ -41,7 +41,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
     refresh();
   }, [refresh]);
 
-  async function handleSubmit(values: { name: string; date: string; venue: string }) {
+  async function handleSubmit(values: CompetitionSubmitValues) {
     setFieldErrors(undefined);
     try {
       if (editState?.competition) {
@@ -63,6 +63,14 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
       await refresh();
     } catch (error) {
       if (error instanceof ApiError) {
+        // Server-authoritative hard block (RD2): a discipline change under
+        // captured scores is refused; surface it against the discipline field.
+        if (error.response.code === "COMPETITION_DISCIPLINE_LOCKED") {
+          setFieldErrors({
+            discipline: ["Cannot change the discipline once scores are captured"],
+          });
+          return;
+        }
         const details = error.response.details as { fieldErrors?: Record<string, string[]> } | undefined;
         setFieldErrors(details?.fieldErrors ?? { name: [error.response.message] });
       } else {
@@ -148,6 +156,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
                 <th>Name</th>
                 <th>Date</th>
                 <th>Venue</th>
+                <th>Discipline</th>
                 <th></th>
               </tr>
             </thead>
@@ -157,6 +166,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
                   <td>{competition.name}</td>
                   <td>{competition.date}</td>
                   <td>{competition.venue ?? "—"}</td>
+                  <td>{competition.discipline}</td>
                   <td>
                     <div className="row-actions">
                       <button

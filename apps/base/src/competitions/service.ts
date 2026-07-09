@@ -12,6 +12,7 @@ import type { CompetitionProjection } from "./projection.js";
 import type { CapturedScoresProvider, LockStateProvider } from "./state-providers.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
+  CompetitionDisciplineLockedError,
   CompetitionLockedError,
   CompetitionNotFoundError,
   ValidationError,
@@ -43,11 +44,16 @@ export class CompetitionService {
 
   create(input: unknown, attribution: Attribution): Competition {
     const parsed = parseOrThrow(createCompetitionRequestSchema, input);
+    // Schema has already deduped / discarded pilotClasses per the toggle.
     const competition: Competition = {
       id: crypto.randomUUID(),
       name: parsed.name,
       date: parsed.date,
       venue: parsed.venue ?? null,
+      discipline: parsed.discipline,
+      pilotNumbersEnabled: parsed.pilotNumbersEnabled,
+      pilotClassesEnabled: parsed.pilotClassesEnabled,
+      pilotClasses: parsed.pilotClasses,
     };
 
     const record = this.eventStore.append({
@@ -61,17 +67,36 @@ export class CompetitionService {
   }
 
   update(id: string, input: unknown, attribution: Attribution): Competition {
-    if (!this.projection.getById(id)) {
+    const existing = this.projection.getById(id);
+    if (!existing) {
       throw new CompetitionNotFoundError(`Competition ${id} not found`);
     }
     const parsed = parseOrThrow(updateCompetitionRequestSchema, input);
+    // Discipline-change guard (RD2/RD5): fires only when the submitted discipline
+    // differs from the stored one. Ordered locked → captured-scores so a
+    // locked-with-scores competition reports locked. No acknowledgment flag; an
+    // unchanged discipline or a pure identity/toggle edit passes freely.
+    if (parsed.discipline !== existing.discipline) {
+      if (this.lockState.isLocked(id)) {
+        throw new CompetitionLockedError("Cannot change the discipline of a locked competition");
+      }
+      if (this.capturedScores.hasCapturedScores(id)) {
+        throw new CompetitionDisciplineLockedError(
+          "Cannot change the discipline once scores are captured",
+        );
+      }
+    }
     // Whole-aggregate identity update over the same id — rename never breaks
-    // id-keyed references.
+    // id-keyed references. Schema has already deduped / discarded pilotClasses.
     const competition: Competition = {
       id,
       name: parsed.name,
       date: parsed.date,
       venue: parsed.venue ?? null,
+      discipline: parsed.discipline,
+      pilotNumbersEnabled: parsed.pilotNumbersEnabled,
+      pilotClassesEnabled: parsed.pilotClassesEnabled,
+      pilotClasses: parsed.pilotClasses,
     };
 
     const record = this.eventStore.append({

@@ -206,15 +206,14 @@ covers qualifying-round competitions only.
 the available tasks, scoring and rules are the correct ones for that class.
 
 **Acceptance criteria**
-- [ ] Given a new competition, when I select a discipline (e.g. F3B, F3J, F3K, F5J,
-  F5K, F5L), then the tasks and rules available for configuration are those of that
-  discipline.
+- [ ] When I create a competition, I choose its discipline (e.g. F3B, F3J, F3K,
+  F5J, F5K, F5L), and thereafter the tasks and rules available for configuration
+  are those of that discipline.
 - [ ] Given a competition seeded from a template, when I open it, then its
   discipline matches the template and is not silently changeable to a class whose
   tasks differ.
 - [ ] Given scores already captured, when I attempt to change the discipline, then
-  the change is prevented or requires explicit re-confirmation, because it
-  invalidates task configuration and results.
+  the change is prevented, because it invalidates task configuration and results.
 
 **Traces to:** area 3.2 · users.md §1 Organiser
 **Notes:** Discipline determines the scoring model — e.g. **F3B normalises its
@@ -225,12 +224,12 @@ numbers live in the per-class rule docs and are authoritative.
 ### 3.3 — Configure entry options
 
 **As an** Organiser, **I want** to toggle entry features that shape the roster and
-results — start numbers and pilot classes — **so that** the competition captures
+results — pilot numbers and pilot classes — **so that** the competition captures
 exactly the per-entrant attributes this event needs.
 
 **Acceptance criteria**
-- [ ] Given a competition, when I enable **start numbers**, then each roster entry
-  can carry a start number and it appears in the draw and reports.
+- [ ] Given a competition, when I enable **pilot numbers**, then each roster entry
+  can carry a pilot number and it appears in the draw and reports.
 - [ ] Given a competition, when I enable **pilot classes**, then each roster entry
   can be assigned a class and results can be grouped/ranked by it.
 - [ ] Given an option I disable, when I view the roster, then the corresponding
@@ -248,7 +247,7 @@ and can be corrected afterwards.
 
 **Acceptance criteria**
 - [ ] Given the master pilot library, when I add pilots to the competition, then
-  each becomes a roster entry carrying its per-entry attributes (e.g. start number,
+  each becomes a roster entry carrying its per-entry attributes (e.g. pilot number,
   class) as enabled in [3.3](#33--configure-entry-options).
 - [ ] Given a roster entry, when I edit its attributes, then the change applies to
   this competition only and not to the master pilot record.

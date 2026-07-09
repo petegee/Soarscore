@@ -36,7 +36,8 @@ has locked must not be deletable at all.
 ### Scope In
 
 - Create a competition capturing **name, venue and date**; name and date must
-  be present before dependent configuration proceeds.
+  be present before dependent configuration proceeds. (STORY-001-004 adds
+  **discipline** to the create step as a required field.)
 - Open one of several competitions and work against its data in isolation.
 - Delete a competition, with explicit confirmation, unless it is locked.
 
