@@ -9,15 +9,19 @@ export function NamePickPrompt({ onSubmit }: { onSubmit: (name: string) => void 
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <label htmlFor="operator-name">Who is operating?</label>
-      <input
-        id="operator-name"
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        autoFocus
-      />
-      <button type="submit">Continue</button>
-    </form>
+    <div className="name-pick">
+      <form onSubmit={handleSubmit}>
+        <label htmlFor="operator-name">Who is operating?</label>
+        <input
+          id="operator-name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoFocus
+        />
+        <button type="submit" className="btn btn-primary">
+          Continue
+        </button>
+      </form>
+    </div>
   );
 }

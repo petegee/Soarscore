@@ -1,0 +1,331 @@
+/* Soarscore companion — field-ready utilitarian styling.
+   High contrast for outdoor readability; large touch targets. */
+
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f4f5f7;
+  --color-border: #9aa1ab;
+  --color-border-light: #d4d8de;
+  --color-text: #14181d;
+  --color-text-muted: #4b535d;
+  --color-primary: #0b5cad;
+  --color-primary-hover: #094a8c;
+  --color-danger: #b3261e;
+  --color-danger-hover: #92201a;
+  --color-error-bg: #fbe9e7;
+  --color-focus: #0b5cad;
+
+  --radius: 6px;
+  --touch-target: 44px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 var(--space-4);
+}
+
+/* ---- Focus visibility (keyboard + gloved-finger friendly) ---- */
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* ---- App chrome ---- */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.app-header .operator-name {
+  font-weight: 600;
+}
+
+.app-header button {
+  margin-left: auto;
+  min-height: 36px;
+  padding: var(--space-1) var(--space-3);
+  background: transparent;
+  color: var(--color-bg);
+  border: 1px solid var(--color-bg);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.app-nav {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 2px solid var(--color-border-light);
+  background: var(--color-surface);
+}
+
+.app-nav button {
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-4);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-bg);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* Disabled nav button = the active screen. */
+.app-nav button:disabled {
+  color: var(--color-bg);
+  background: var(--color-text);
+  border-color: var(--color-text);
+  cursor: default;
+}
+
+.screen {
+  padding: var(--space-4);
+  max-width: 60rem;
+}
+
+/* ---- Buttons ---- */
+
+.btn {
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-4);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 2px solid var(--color-text);
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.btn-danger {
+  background: var(--color-bg);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-error-bg);
+}
+
+/* Compact variant for in-table row actions. */
+.btn-small {
+  min-height: 36px;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.9375rem;
+}
+
+/* ---- Tables ---- */
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: var(--space-4);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.data-table th {
+  border-bottom: 2px solid var(--color-border);
+  font-size: 0.9375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: var(--color-surface);
+}
+
+.row-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+/* ---- Forms ---- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 28rem;
+}
+
+.form label {
+  font-weight: 600;
+  margin-top: var(--space-2);
+}
+
+.form input,
+.data-table input {
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  font-size: 1.0625rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  width: 100%;
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.field-error {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-error-bg);
+  border-left: 4px solid var(--color-danger);
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* Forms containing an entries table (landing tables) need more width. */
+.form-wide {
+  max-width: 40rem;
+}
+
+/* ---- Toolbar above a library list ---- */
+
+.toolbar {
+  margin-bottom: var(--space-4);
+}
+
+/* ---- Empty / loading states ---- */
+
+.status-text {
+  color: var(--color-text-muted);
+  font-size: 1.0625rem;
+  padding: var(--space-4) 0;
+}
+
+/* ---- Dialog (delete confirmation) ---- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 29, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.dialog {
+  background: var(--color-bg);
+  border-radius: var(--radius);
+  padding: var(--space-6);
+  max-width: 26rem;
+  width: 100%;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.dialog p:first-child {
+  margin-top: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.dialog .form-actions {
+  margin-top: var(--space-4);
+}
+
+/* ---- Name-pick prompt ---- */
+
+.name-pick {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-surface);
+}
+
+.name-pick form {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius);
+  padding: var(--space-6);
+  width: 100%;
+  max-width: 24rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.name-pick label {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.name-pick input {
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  font-size: 1.125rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+}

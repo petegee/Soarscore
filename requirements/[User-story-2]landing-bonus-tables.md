@@ -78,6 +78,12 @@ reference) and tells the Organiser why.
 **Then** selecting a landing table is not required and its absence is not
 reported as an error.
 
+> **Scope note:** the save-time assertion in AC5 lives at the task-configuration
+> surface, which is owned by STORY-001-008 — this story has no competition/task
+> config to exercise it against. Within STORY-001-002, AC5 reduces to *a table
+> can exist independently of any task* (a table is never forced into being).
+> STORY-001-008 owns "no table is demanded at save for a time-only task."
+
 ### INVEST Check
 
 Independent · Valuable (removes per-event table re-entry) · Small (2 days,

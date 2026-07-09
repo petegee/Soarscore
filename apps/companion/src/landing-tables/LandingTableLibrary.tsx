@@ -1,28 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CompetitionRef, Pilot } from "@soarscore/shared";
+import type { CompetitionRef, LandingBonusTable } from "@soarscore/shared";
 import { apiRequest, ApiError } from "../api/client.js";
 import type { Actor } from "../identity/useActor.js";
-import { PilotForm, type PilotFormValues } from "./PilotForm.js";
+import { LandingTableForm } from "./LandingTableForm.js";
 
 interface EditState {
-  pilot?: Pilot;
+  table?: LandingBonusTable;
 }
 
-function formValuesToBody(values: PilotFormValues) {
-  return {
-    name: values.name,
-    registrationId: values.registrationId,
-    club: values.club,
-    contact: values.contact,
-  };
-}
-
-export function PilotLibrary({ actor }: { actor: Actor }) {
-  const [pilots, setPilots] = useState<Pilot[]>([]);
+export function LandingTableLibrary({ actor }: { actor: Actor }) {
+  const [tables, setTables] = useState<LandingBonusTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
-  const [pendingDelete, setPendingDelete] = useState<Pilot | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<LandingBonusTable | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const actorName = actor.actorName ?? "unknown";
@@ -30,11 +21,11 @@ export function PilotLibrary({ actor }: { actor: Actor }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await apiRequest<Pilot[]>("/api/pilots", {
+      const result = await apiRequest<LandingBonusTable[]>("/api/landing-tables", {
         actorName,
         clientId: actor.clientId,
       });
-      setPilots(result);
+      setTables(result);
     } finally {
       setLoading(false);
     }
@@ -44,20 +35,20 @@ export function PilotLibrary({ actor }: { actor: Actor }) {
     refresh();
   }, [refresh]);
 
-  async function handleSubmit(values: PilotFormValues) {
+  async function handleSubmit(values: { name: string; entries: { distanceM: number; points: number }[] }) {
     setFieldErrors(undefined);
     try {
-      if (editState?.pilot) {
-        await apiRequest(`/api/pilots/${editState.pilot.id}`, {
+      if (editState?.table) {
+        await apiRequest(`/api/landing-tables/${editState.table.id}`, {
           method: "PUT",
-          body: formValuesToBody(values),
+          body: values,
           actorName,
           clientId: actor.clientId,
         });
       } else {
-        await apiRequest("/api/pilots", {
+        await apiRequest("/api/landing-tables", {
           method: "POST",
-          body: formValuesToBody(values),
+          body: values,
           actorName,
           clientId: actor.clientId,
         });
@@ -74,10 +65,19 @@ export function PilotLibrary({ actor }: { actor: Actor }) {
     }
   }
 
-  async function confirmDelete(pilot: Pilot) {
+  async function duplicate(table: LandingBonusTable) {
+    await apiRequest(`/api/landing-tables/${table.id}/duplicate`, {
+      method: "POST",
+      actorName,
+      clientId: actor.clientId,
+    });
+    await refresh();
+  }
+
+  async function confirmDelete(table: LandingBonusTable) {
     setDeleteError(null);
     try {
-      await apiRequest(`/api/pilots/${pilot.id}`, {
+      await apiRequest(`/api/landing-tables/${table.id}`, {
         method: "DELETE",
         actorName,
         clientId: actor.clientId,
@@ -88,7 +88,7 @@ export function PilotLibrary({ actor }: { actor: Actor }) {
       if (error instanceof ApiError) {
         const details = error.response.details as { competitions?: CompetitionRef[] } | undefined;
         const names = details?.competitions?.map((c) => c.name).join(", ");
-        setDeleteError(names ? `cannot delete — on the roster of: ${names}` : error.response.message);
+        setDeleteError(names ? `cannot delete — used by: ${names}` : error.response.message);
       } else {
         throw error;
       }
@@ -97,8 +97,8 @@ export function PilotLibrary({ actor }: { actor: Actor }) {
 
   if (editState) {
     return (
-      <PilotForm
-        pilot={editState.pilot}
+      <LandingTableForm
+        table={editState.table}
         fieldErrors={fieldErrors}
         onSubmit={handleSubmit}
         onCancel={() => {
@@ -111,45 +111,44 @@ export function PilotLibrary({ actor }: { actor: Actor }) {
 
   return (
     <div>
-      <h1>Pilot library</h1>
+      <h1>Landing-bonus tables</h1>
       <div className="toolbar">
         <button className="btn btn-primary" onClick={() => setEditState({})}>
-          Add pilot
+          Add table
         </button>
       </div>
 
       {loading && <p className="status-text">Loading…</p>}
-      {!loading && pilots.length === 0 && (
-        <p className="status-text">No pilots yet. Add one to get started.</p>
+      {!loading && tables.length === 0 && (
+        <p className="status-text">No landing tables yet. Add one to get started.</p>
       )}
 
-      {!loading && pilots.length > 0 && (
+      {!loading && tables.length > 0 && (
         <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
               <th>Name</th>
-              <th>Registration ID</th>
-              <th>Club</th>
-              <th>Contact</th>
+              <th>Entries</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {pilots.map((pilot) => (
-              <tr key={pilot.id}>
-                <td>{pilot.name}</td>
-                <td>{pilot.registrationId ?? ""}</td>
-                <td>{pilot.club ?? ""}</td>
-                <td>{pilot.contact ?? ""}</td>
+            {tables.map((table) => (
+              <tr key={table.id}>
+                <td>{table.name}</td>
+                <td>{table.entries.length}</td>
                 <td>
                   <div className="row-actions">
-                    <button className="btn btn-small" onClick={() => setEditState({ pilot })}>
+                    <button className="btn btn-small" onClick={() => setEditState({ table })}>
                       Edit
+                    </button>
+                    <button className="btn btn-small" onClick={() => duplicate(table)}>
+                      Duplicate
                     </button>
                     <button
                       className="btn btn-small btn-danger"
-                      onClick={() => setPendingDelete(pilot)}
+                      onClick={() => setPendingDelete(table)}
                     >
                       Delete
                     </button>

@@ -37,7 +37,8 @@ export function PilotForm({ pilot, fieldErrors, onSubmit, onCancel }: PilotFormP
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="form">
+      <h1>{pilot ? "Edit pilot" : "Add pilot"}</h1>
       <label htmlFor="pilot-name">Name (required)</label>
       <input
         id="pilot-name"
@@ -45,7 +46,11 @@ export function PilotForm({ pilot, fieldErrors, onSubmit, onCancel }: PilotFormP
         onChange={(event) => update("name", event.target.value)}
         required
       />
-      {fieldErrors?.name && <p role="alert">{fieldErrors.name.join(", ")}</p>}
+      {fieldErrors?.name && (
+        <p role="alert" className="field-error">
+          {fieldErrors.name.join(", ")}
+        </p>
+      )}
 
       <label htmlFor="pilot-registration">Registration ID</label>
       <input
@@ -68,10 +73,14 @@ export function PilotForm({ pilot, fieldErrors, onSubmit, onCancel }: PilotFormP
         onChange={(event) => update("contact", event.target.value)}
       />
 
-      <button type="submit">Save</button>
-      <button type="button" onClick={onCancel}>
-        Cancel
-      </button>
+      <div className="form-actions">
+        <button type="submit" className="btn btn-primary">
+          Save
+        </button>
+        <button type="button" className="btn" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }
