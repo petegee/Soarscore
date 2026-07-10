@@ -235,6 +235,14 @@ types from Entities and the three functions below. No side effects.
 1. Add `export * from "./scoring.js";` (keep alphabetical-ish grouping with the
    other domain modules).
 
+### Update Build Config — `packages/shared/tsconfig.json`
+1. The suite is colocated in `src` (Norm 6), but `tsconfig.json` has
+   `include: ["src"]`, so `tsc` would compile `scoring.test.ts` into `dist` and
+   fail `npm run build` (Safeguard 7). Add `"exclude": ["src/**/*.test.ts"]` so
+   the colocated test is picked up by `vitest run` yet kept out of the tsc build.
+   (`apps/base` sidesteps this by holding tests in a sibling `test/` dir outside
+   `rootDir`; the shared package colocates instead, so it needs the exclude.)
+
 ### Create Test Suite — `packages/shared/src/scoring.test.ts`
 1. First Vitest suite in `packages/shared`; run by root `vitest run`.
 2. Export `DEGENERATE_CASES` — a reusable fixture set covering AC6/AC7/AC8 (and
