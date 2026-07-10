@@ -139,7 +139,7 @@ describe("competition routes", () => {
       payload: { ...sample, classModelId: F5K },
     });
     expect(blocked.statusCode).toBe(409);
-    expect(blocked.json().code).toBe("COMPETITION_DISCIPLINE_LOCKED");
+    expect(blocked.json().code).toBe("COMPETITION_CLASS_LOCKED");
     expect(blocked.json().details.reason).toBe("captured-scores");
   });
 

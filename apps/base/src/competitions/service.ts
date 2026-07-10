@@ -13,7 +13,7 @@ import type { ClassModelProjection } from "../class-models/projection.js";
 import type { CapturedScoresProvider, LockStateProvider } from "./state-providers.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
-  CompetitionDisciplineLockedError,
+  CompetitionClassLockedError,
   CompetitionLockedError,
   CompetitionNotFoundError,
   ValidationError,
@@ -86,7 +86,7 @@ export class CompetitionService {
         throw new CompetitionLockedError("Cannot change the contest class of a locked competition");
       }
       if (this.capturedScores.hasCapturedScores(id)) {
-        throw new CompetitionDisciplineLockedError(
+        throw new CompetitionClassLockedError(
           "Cannot change the contest class once scores are captured",
         );
       }

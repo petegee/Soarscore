@@ -26,7 +26,7 @@ import {
 import { CompetitionService } from "./competitions/service.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
-  CompetitionDisciplineLockedError,
+  CompetitionClassLockedError,
   CompetitionLockedError,
   CompetitionNotFoundError,
 } from "./competitions/errors.js";
@@ -224,7 +224,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
       } satisfies ErrorResponse);
       return;
     }
-    if (error instanceof CompetitionDisciplineLockedError) {
+    if (error instanceof CompetitionClassLockedError) {
       reply.code(409).send({
         code: error.code,
         message: error.message,

@@ -84,7 +84,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
       if (error instanceof ApiError) {
         // Server-authoritative hard block (RD2): a discipline change under
         // captured scores is refused; surface it against the discipline field.
-        if (error.response.code === "COMPETITION_DISCIPLINE_LOCKED") {
+        if (error.response.code === "COMPETITION_CLASS_LOCKED") {
           setFieldErrors({
             classModelId: ["Cannot change the contest class once scores are captured"],
           });

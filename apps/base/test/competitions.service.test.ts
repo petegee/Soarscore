@@ -13,7 +13,7 @@ import {
 import { CompetitionService } from "../src/competitions/service.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
-  CompetitionDisciplineLockedError,
+  CompetitionClassLockedError,
   CompetitionLockedError,
   CompetitionNotFoundError,
   ValidationError,
@@ -270,7 +270,7 @@ describe("CompetitionService", () => {
 
     expect(() =>
       service.update(created.id, { ...sample, classModelId: F5K }, attribution),
-    ).toThrow(CompetitionDisciplineLockedError);
+    ).toThrow(CompetitionClassLockedError);
     // Unchanged in the projection — blocked before appending.
     expect(service.get(created.id).classModelId).toBe(F3J);
   });

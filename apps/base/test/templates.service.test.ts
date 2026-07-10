@@ -11,7 +11,7 @@ import {
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
 import {
-  CompetitionDisciplineLockedError,
+  CompetitionClassLockedError,
   CompetitionNotFoundError,
 } from "../src/competitions/errors.js";
 import { TemplateProjection } from "../src/templates/projection.js";
@@ -300,7 +300,7 @@ describe("TemplateService", () => {
         { name: "Guarded", date: "2026-11-07", classModelId: F5J },
         attribution,
       ),
-    ).toThrow(CompetitionDisciplineLockedError);
+    ).toThrow(CompetitionClassLockedError);
   });
 
   it("AC4: template edit and delete never touch seeded competitions", () => {
