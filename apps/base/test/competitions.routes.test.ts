@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stockModelIdFor } from "@soarscore/shared";
 import { buildApp } from "../src/app.js";
 import type {
   CapturedScoresProvider,
@@ -12,7 +13,10 @@ function makeApp(overrides?: {
   return buildApp({ dbPath: ":memory:", ...overrides });
 }
 
-const sample = { name: "Spring Cup", date: "2026-09-12", venue: "Rotorua", discipline: "F3J" };
+const F3J = stockModelIdFor("F3J");
+const F5K = stockModelIdFor("F5K");
+
+const sample = { name: "Spring Cup", date: "2026-09-12", venue: "Rotorua", classModelId: F3J };
 
 async function createCompetition(app: ReturnType<typeof makeApp>) {
   const response = await app.inject({ method: "POST", url: "/api/competitions", payload: sample });
@@ -49,14 +53,14 @@ describe("competition routes", () => {
     const updated = await app.inject({
       method: "PUT",
       url: `/api/competitions/${id}`,
-      payload: { name: "Renamed", date: "2026-09-13", venue: null, discipline: "F3J" },
+      payload: { name: "Renamed", date: "2026-09-13", venue: null, classModelId: F3J },
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json()).toMatchObject({
       name: "Renamed",
       date: "2026-09-13",
       venue: null,
-      discipline: "F3J",
+      classModelId: F3J,
     });
   });
 
@@ -113,33 +117,33 @@ describe("competition routes", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it("rejects a missing discipline (400) with a field message", async () => {
+  it("rejects a missing class reference (400) with a field message", async () => {
     const app = makeApp();
     const response = await app.inject({
       method: "POST",
       url: "/api/competitions",
-      payload: { name: "No discipline", date: "2026-09-12" },
+      payload: { name: "No class", date: "2026-09-12" },
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().code).toBe("VALIDATION_FAILED");
-    expect(response.json().details.fieldErrors.discipline).toBeDefined();
+    expect(response.json().details.fieldErrors.classModelId).toBeDefined();
   });
 
-  it("PUT changing discipline under captured scores → 409 with reason", async () => {
+  it("PUT changing class under captured scores → 409 with reason", async () => {
     const app = makeApp({ capturedScoresProvider: { hasCapturedScores: () => true } });
     const id = await createCompetition(app);
 
     const blocked = await app.inject({
       method: "PUT",
       url: `/api/competitions/${id}`,
-      payload: { ...sample, discipline: "F5K" },
+      payload: { ...sample, classModelId: F5K },
     });
     expect(blocked.statusCode).toBe(409);
     expect(blocked.json().code).toBe("COMPETITION_DISCIPLINE_LOCKED");
     expect(blocked.json().details.reason).toBe("captured-scores");
   });
 
-  it("PUT identity-only edit under captured scores succeeds (unchanged discipline)", async () => {
+  it("PUT identity-only edit under captured scores succeeds (unchanged class)", async () => {
     const app = makeApp({ capturedScoresProvider: { hasCapturedScores: () => true } });
     const id = await createCompetition(app);
 
@@ -149,6 +153,6 @@ describe("competition routes", () => {
       payload: { ...sample, name: "Renamed" },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toMatchObject({ name: "Renamed", discipline: "F3J" });
+    expect(updated.json()).toMatchObject({ name: "Renamed", classModelId: F3J });
   });
 });

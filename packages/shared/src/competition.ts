@@ -16,7 +16,10 @@ export interface Competition {
   name: string;
   date: string;
   venue: string | null;
-  discipline: Discipline;
+  // The class definition is now referenced by id (D12 / STORY-001-016), never
+  // an embedded discipline enum — the model is the one place a class's shape
+  // lives (NFR-1).
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];
@@ -94,10 +97,9 @@ export const competitionIdentityFields = {
 // same change (STORY-001-007/008/009 obligation).
 export const competitionConfigurationFields = {
   // Required on both create and update (RD1); a competition never exists without
-  // one. The single errorMap covers a missing value and an unknown code alike.
-  discipline: z.enum(DISCIPLINES, {
-    errorMap: () => ({ message: "A discipline is required" }),
-  }),
+  // a class model. The reference is validated against the class-model catalogue
+  // in the service (Zod cannot see sibling aggregates).
+  classModelId: z.string().min(1, "A contest class is required"),
   // Per-competition entry options; default off so existing callers are additive.
   pilotNumbersEnabled: z.boolean().default(false),
   pilotClassesEnabled: z.boolean().default(false),

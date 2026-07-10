@@ -1,4 +1,4 @@
-import type { ContestTemplate, Discipline } from "@soarscore/shared";
+import { stockModelIdFor, type ContestTemplate, type Discipline } from "@soarscore/shared";
 import type { EventRecord } from "../eventstore/event-store.js";
 
 const SCOPE = "master-data";
@@ -19,15 +19,22 @@ export class TemplateProjection {
         const payload = record.payload as {
           id: string;
           name: string;
-          discipline: Discipline;
+          // New events carry classModelId; legacy events carry discipline only.
+          classModelId?: string;
+          discipline?: Discipline;
           pilotNumbersEnabled: boolean;
           pilotClassesEnabled: boolean;
           pilotClasses: string[];
         };
+        // Back-fill (D12): a legacy discipline payload resolves to its stock
+        // model on rebuild — no log rewrite.
+        const classModelId =
+          payload.classModelId ??
+          (payload.discipline ? stockModelIdFor(payload.discipline) : "");
         this.templates.set(payload.id, {
           id: payload.id,
           name: payload.name,
-          discipline: payload.discipline,
+          classModelId,
           pilotNumbersEnabled: payload.pilotNumbersEnabled,
           pilotClassesEnabled: payload.pilotClassesEnabled,
           pilotClasses: [...payload.pilotClasses],

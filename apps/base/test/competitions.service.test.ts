@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { stockModelIdFor } from "@soarscore/shared";
 import { EventStore } from "../src/eventstore/event-store.js";
 import { CompetitionProjection } from "../src/competitions/projection.js";
+import { ClassModelProjection } from "../src/class-models/projection.js";
+import { ClassModelService } from "../src/class-models/service.js";
 import {
   AlwaysUnlockedProvider,
   NoScoresYetProvider,
@@ -18,17 +21,35 @@ import {
 
 const attribution = { actorName: "tester", originClient: "test-client", authority: "organiser" };
 
+const F3J = stockModelIdFor("F3J");
+const F5J = stockModelIdFor("F5J");
+const F5K = stockModelIdFor("F5K");
+const F5L = stockModelIdFor("F5L");
+const F3B = stockModelIdFor("F3B");
+const F3K = stockModelIdFor("F3K");
+
 function buildService(
   lockState: LockStateProvider = new AlwaysUnlockedProvider(),
   capturedScores: CapturedScoresProvider = new NoScoresYetProvider(),
 ) {
   const eventStore = new EventStore(":memory:");
+  // Seed the stock class models so competitions can reference them (AC8).
+  const classModelProjection = new ClassModelProjection();
+  new ClassModelService(eventStore, classModelProjection, {
+    getReferencingCompetitions: () => [],
+  }).seedStockModels();
   const projection = new CompetitionProjection();
-  const service = new CompetitionService(eventStore, projection, lockState, capturedScores);
+  const service = new CompetitionService(
+    eventStore,
+    projection,
+    classModelProjection,
+    lockState,
+    capturedScores,
+  );
   return { eventStore, projection, service };
 }
 
-const sample = { name: "Spring Cup", date: "2026-09-12", venue: "Rotorua", discipline: "F3J" };
+const sample = { name: "Spring Cup", date: "2026-09-12", venue: "Rotorua", classModelId: F3J };
 
 describe("CompetitionService", () => {
   it("AC1: creates identity that survives a full replay (close/re-open)", () => {
@@ -37,7 +58,7 @@ describe("CompetitionService", () => {
     expect(created.name).toBe("Spring Cup");
     expect(created.date).toBe("2026-09-12");
     expect(created.venue).toBe("Rotorua");
-    expect(created.discipline).toBe("F3J");
+    expect(created.classModelId).toBe(F3J);
     expect(created.pilotNumbersEnabled).toBe(false);
     expect(created.pilotClassesEnabled).toBe(false);
     expect(created.pilotClasses).toEqual([]);
@@ -50,7 +71,7 @@ describe("CompetitionService", () => {
   it("normalises a blank venue to null", () => {
     const { service } = buildService();
     const created = service.create(
-      { name: "No Venue", date: "2026-01-02", venue: "  ", discipline: "F5J" },
+      { name: "No Venue", date: "2026-01-02", venue: "  ", classModelId: F5J },
       attribution,
     );
     expect(created.venue).toBeNull();
@@ -71,7 +92,7 @@ describe("CompetitionService", () => {
   it("AC2: rejects a missing / malformed date, naming the field", () => {
     const { service } = buildService();
     try {
-      service.create({ name: "X", date: "not-a-date" }, attribution);
+      service.create({ name: "X", date: "not-a-date", classModelId: F3J }, attribution);
       throw new Error("expected ValidationError");
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationError);
@@ -83,17 +104,17 @@ describe("CompetitionService", () => {
   it("AC3: two competitions are isolated — deleting/renaming one leaves the other intact", () => {
     const { service } = buildService();
     const a = service.create(
-      { name: "A", date: "2026-01-01", venue: null, discipline: "F3B" },
+      { name: "A", date: "2026-01-01", venue: null, classModelId: F3B },
       attribution,
     );
     const b = service.create(
-      { name: "B", date: "2026-02-02", venue: null, discipline: "F3K" },
+      { name: "B", date: "2026-02-02", venue: null, classModelId: F3K },
       attribution,
     );
 
     service.update(
       a.id,
-      { name: "A renamed", date: "2026-01-01", venue: null, discipline: "F3B" },
+      { name: "A renamed", date: "2026-01-01", venue: null, classModelId: F3B },
       attribution,
     );
     service.delete(a.id, { confirmDestroysResults: false }, attribution);
@@ -104,7 +125,7 @@ describe("CompetitionService", () => {
       name: "B",
       date: "2026-02-02",
       venue: null,
-      discipline: "F3K",
+      classModelId: F3K,
       pilotNumbersEnabled: false,
       pilotClassesEnabled: false,
       pilotClasses: [],
@@ -181,15 +202,27 @@ describe("CompetitionService", () => {
     );
   });
 
-  it("rejects an unknown discipline code at the Zod boundary, naming the field", () => {
+  it("AC8: rejects a blank class reference at the Zod boundary, naming the field", () => {
     const { service } = buildService();
     try {
-      service.create({ ...sample, discipline: "X3X" }, attribution);
+      service.create({ ...sample, classModelId: "" }, attribution);
       throw new Error("expected ValidationError");
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationError);
       const details = (error as ValidationError).details as { fieldErrors: Record<string, string[]> };
-      expect(details.fieldErrors.discipline).toContain("A discipline is required");
+      expect(details.fieldErrors.classModelId).toContain("A contest class is required");
+    }
+  });
+
+  it("AC8: rejects a reference to a non-existent class model, naming the field", () => {
+    const { service } = buildService();
+    try {
+      service.create({ ...sample, classModelId: "stock-x3x" }, attribution);
+      throw new Error("expected ValidationError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      const details = (error as ValidationError).details as { fieldErrors: Record<string, string[]> };
+      expect(details.fieldErrors.classModelId).toContain("Selected contest class no longer exists");
     }
   });
 
@@ -216,51 +249,51 @@ describe("CompetitionService", () => {
     ).toThrow(ValidationError);
   });
 
-  it("update resubmitting the same discipline passes even under captured scores", () => {
+  it("update resubmitting the same class passes even under captured scores", () => {
     const scores: CapturedScoresProvider = { hasCapturedScores: () => true };
     const { service } = buildService(new AlwaysUnlockedProvider(), scores);
     const created = service.create(sample, attribution);
 
     const updated = service.update(
       created.id,
-      { ...sample, name: "Renamed", discipline: "F3J" },
+      { ...sample, name: "Renamed", classModelId: F3J },
       attribution,
     );
     expect(updated.name).toBe("Renamed");
-    expect(updated.discipline).toBe("F3J");
+    expect(updated.classModelId).toBe(F3J);
   });
 
-  it("update changing discipline hard-blocks 409 when captured scores exist (no ack flag)", () => {
+  it("update changing class hard-blocks 409 when captured scores exist (no ack flag)", () => {
     const scores: CapturedScoresProvider = { hasCapturedScores: () => true };
     const { service } = buildService(new AlwaysUnlockedProvider(), scores);
     const created = service.create(sample, attribution);
 
     expect(() =>
-      service.update(created.id, { ...sample, discipline: "F5K" }, attribution),
+      service.update(created.id, { ...sample, classModelId: F5K }, attribution),
     ).toThrow(CompetitionDisciplineLockedError);
     // Unchanged in the projection — blocked before appending.
-    expect(service.get(created.id).discipline).toBe("F3J");
+    expect(service.get(created.id).classModelId).toBe(F3J);
   });
 
-  it("update changing discipline reports locked (locked precedes captured-scores)", () => {
+  it("update changing class reports locked (locked precedes captured-scores)", () => {
     const locked: LockStateProvider = { isLocked: () => true };
     const scores: CapturedScoresProvider = { hasCapturedScores: () => true };
     const { service } = buildService(locked, scores);
     const created = service.create(sample, attribution);
 
     expect(() =>
-      service.update(created.id, { ...sample, discipline: "F5K" }, attribution),
+      service.update(created.id, { ...sample, classModelId: F5K }, attribution),
     ).toThrow(CompetitionLockedError);
   });
 
-  it("changing discipline is free when there are no captured scores", () => {
+  it("changing class is free when there are no captured scores", () => {
     const { service } = buildService();
     const created = service.create(sample, attribution);
-    const updated = service.update(created.id, { ...sample, discipline: "F5L" }, attribution);
-    expect(updated.discipline).toBe("F5L");
+    const updated = service.update(created.id, { ...sample, classModelId: F5L }, attribution);
+    expect(updated.classModelId).toBe(F5L);
   });
 
-  it("created/updated replay carries discipline and entry options", () => {
+  it("created/updated replay carries the class reference and entry options", () => {
     const { eventStore, service } = buildService();
     const created = service.create(
       { ...sample, pilotNumbersEnabled: true, pilotClassesEnabled: true, pilotClasses: ["Open"] },
@@ -268,14 +301,14 @@ describe("CompetitionService", () => {
     );
     const updated = service.update(
       created.id,
-      { ...sample, name: "Renamed", discipline: "F5J", pilotNumbersEnabled: false },
+      { ...sample, name: "Renamed", classModelId: F5J, pilotNumbersEnabled: false },
       attribution,
     );
 
     const fresh = new CompetitionProjection();
     fresh.rebuild(eventStore.readAll());
     expect(fresh.getById(created.id)).toEqual(updated);
-    expect(fresh.getById(created.id)?.discipline).toBe("F5J");
+    expect(fresh.getById(created.id)?.classModelId).toBe(F5J);
   });
 
   it("disabling pilot classes via update discards the set (RD4)", () => {

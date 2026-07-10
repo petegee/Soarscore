@@ -1,6 +1,7 @@
 import type { Pilot } from "./pilot.js";
 import type { LandingBonusEntry, LandingBonusTable } from "./landing-table.js";
-import type { Competition, Discipline } from "./competition.js";
+import type { Competition } from "./competition.js";
+import type { ContestClassModel } from "./class-model.js";
 import type { ContestTemplate } from "./contest-template.js";
 import type { RosterEntry } from "./roster.js";
 
@@ -64,6 +65,54 @@ export function landingTableToCreatedPayload(
   };
 }
 
+// Class-model events (STORY-001-016). Stock models arrive via classModel.seeded
+// (idempotent seed-on-init under system attribution); custom clones via
+// classModel.created; edits via classModel.updated; tombstones via
+// classModel.deleted. All three write events carry the full model shape,
+// denormalised for audit.
+export type ClassModelEventType =
+  | "classModel.seeded"
+  | "classModel.created"
+  | "classModel.updated"
+  | "classModel.deleted";
+
+export type ClassModelSeededPayload = ContestClassModel;
+export type ClassModelCreatedPayload = ContestClassModel;
+export type ClassModelUpdatedPayload = ContestClassModel;
+
+export interface ClassModelDeletedPayload {
+  modelId: string;
+}
+
+export type ClassModelEventPayload =
+  | ClassModelSeededPayload
+  | ClassModelCreatedPayload
+  | ClassModelUpdatedPayload
+  | ClassModelDeletedPayload;
+
+// Deep-copies the mutable nested rule structures (dropWorst, landingTable
+// entries) so no appended payload aliases the caller's model.
+export function classModelToCreatedPayload(model: ContestClassModel): ClassModelCreatedPayload {
+  return {
+    id: model.id,
+    name: model.name,
+    sourceClass: model.sourceClass,
+    origin: model.origin,
+    sourceModelId: model.sourceModelId,
+    basis: model.basis,
+    speedInverted: model.speedInverted,
+    pointsPerSecond: model.pointsPerSecond,
+    dropWorst: { ...model.dropWorst },
+    landingTable: model.landingTable
+      ? {
+          id: model.landingTable.id,
+          name: model.landingTable.name,
+          entries: model.landingTable.entries.map((e) => ({ ...e })),
+        }
+      : null,
+  };
+}
+
 export type CompetitionEventType =
   | "competition.created"
   | "competition.updated"
@@ -74,9 +123,10 @@ export interface CompetitionCreatedPayload {
   name: string;
   date: string;
   venue: string | null;
-  // Discipline + entry options ride the existing created/updated events (RD5);
-  // there is no dedicated disciplineChanged event.
-  discipline: Discipline;
+  // Class-model reference + entry options ride the existing created/updated
+  // events (RD5); there is no dedicated classChanged event. Legacy events
+  // carry `discipline` instead — the projection back-fills them (D12).
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];
@@ -154,7 +204,9 @@ export type ContestTemplateEventType =
 export interface ContestTemplateCreatedPayload {
   id: string;
   name: string;
-  discipline: Discipline;
+  // Class-model reference (D12); legacy events carry `discipline` and are
+  // back-filled by the projection.
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];
@@ -187,7 +239,7 @@ export function contestTemplateToCreatedPayload(
   return {
     id: template.id,
     name: template.name,
-    discipline: template.discipline,
+    classModelId: template.classModelId,
     pilotNumbersEnabled: template.pilotNumbersEnabled,
     pilotClassesEnabled: template.pilotClassesEnabled,
     pilotClasses: [...template.pilotClasses],
@@ -202,7 +254,7 @@ export function competitionToCreatedPayload(
     name: competition.name,
     date: competition.date,
     venue: competition.venue,
-    discipline: competition.discipline,
+    classModelId: competition.classModelId,
     pilotNumbersEnabled: competition.pilotNumbersEnabled,
     pilotClassesEnabled: competition.pilotClassesEnabled,
     pilotClasses: competition.pilotClasses,

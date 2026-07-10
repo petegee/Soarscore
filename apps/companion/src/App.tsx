@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useActor } from "./identity/useActor.js";
 import { NamePickPrompt } from "./identity/NamePickPrompt.js";
 import { PilotLibrary } from "./pilots/PilotLibrary.js";
-import { LandingTableLibrary } from "./landing-tables/LandingTableLibrary.js";
+import { ClassModelLibrary } from "./class-models/ClassModelLibrary.js";
 import { CompetitionLibrary } from "./competitions/CompetitionLibrary.js";
 import { TemplateLibrary } from "./templates/TemplateLibrary.js";
 
-type Screen = "competitions" | "templates" | "pilots" | "landing-tables";
+type Screen = "competitions" | "templates" | "pilots" | "class-models";
 
 export function App() {
   const actor = useActor();
@@ -44,17 +44,17 @@ export function App() {
           Pilots
         </button>
         <button
-          onClick={() => setScreen("landing-tables")}
-          disabled={screen === "landing-tables"}
+          onClick={() => setScreen("class-models")}
+          disabled={screen === "class-models"}
         >
-          Landing tables
+          Contest classes
         </button>
       </nav>
       <main className="screen">
         {screen === "competitions" && <CompetitionLibrary actor={actor} />}
         {screen === "templates" && <TemplateLibrary actor={actor} />}
         {screen === "pilots" && <PilotLibrary actor={actor} />}
-        {screen === "landing-tables" && <LandingTableLibrary actor={actor} />}
+        {screen === "class-models" && <ClassModelLibrary actor={actor} />}
       </main>
     </div>
   );

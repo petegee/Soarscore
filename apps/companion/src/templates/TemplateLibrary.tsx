@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Competition, ContestTemplate } from "@soarscore/shared";
+import type { Competition, ContestClassModel, ContestTemplate } from "@soarscore/shared";
 import { apiRequest, ApiError } from "../api/client.js";
 import type { Actor } from "../identity/useActor.js";
 import { TemplateForm, type TemplateSubmitValues } from "./TemplateForm.js";
@@ -19,6 +19,7 @@ interface SeedState {
 
 export function TemplateLibrary({ actor }: { actor: Actor }) {
   const [templates, setTemplates] = useState<ContestTemplate[]>([]);
+  const [classModels, setClassModels] = useState<ContestClassModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
@@ -33,15 +34,21 @@ export function TemplateLibrary({ actor }: { actor: Actor }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await apiRequest<ContestTemplate[]>("/api/templates", {
-        actorName,
-        clientId: actor.clientId,
-      });
-      setTemplates(result);
+      const [tmpls, models] = await Promise.all([
+        apiRequest<ContestTemplate[]>("/api/templates", { actorName, clientId: actor.clientId }),
+        apiRequest<ContestClassModel[]>("/api/class-models", {
+          actorName,
+          clientId: actor.clientId,
+        }),
+      ]);
+      setTemplates(tmpls);
+      setClassModels(models);
     } finally {
       setLoading(false);
     }
   }, [actorName, actor.clientId]);
+
+  const classModelName = (id: string) => classModels.find((m) => m.id === id)?.name ?? "—";
 
   useEffect(() => {
     refresh();
@@ -130,6 +137,7 @@ export function TemplateLibrary({ actor }: { actor: Actor }) {
     return (
       <TemplateForm
         template={editState.template}
+        classModels={classModels}
         fieldErrors={fieldErrors}
         onSubmit={handleSubmit}
         onCancel={() => {
@@ -166,7 +174,7 @@ export function TemplateLibrary({ actor }: { actor: Actor }) {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Discipline</th>
+                <th>Class</th>
                 <th></th>
               </tr>
             </thead>
@@ -174,7 +182,7 @@ export function TemplateLibrary({ actor }: { actor: Actor }) {
               {templates.map((template) => (
                 <tr key={template.id}>
                   <td>{template.name}</td>
-                  <td>{template.discipline}</td>
+                  <td>{classModelName(template.classModelId)}</td>
                   <td>
                     <div className="row-actions">
                       <button className="btn btn-small" onClick={() => startSeed(template)}>

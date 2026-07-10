@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { stockModelIdFor } from "@soarscore/shared";
 import { EventStore } from "../src/eventstore/event-store.js";
 import { CompetitionProjection } from "../src/competitions/projection.js";
+import { ClassModelProjection } from "../src/class-models/projection.js";
+import { ClassModelService } from "../src/class-models/service.js";
 import {
   AlwaysUnlockedProvider,
   NoScoresYetProvider,
@@ -17,12 +20,21 @@ import { TemplateNotFoundError, ValidationError } from "../src/templates/errors.
 
 const attribution = { actorName: "tester", originClient: "test-client", authority: "organiser" };
 
+const F3J = stockModelIdFor("F3J");
+const F3K = stockModelIdFor("F3K");
+const F5J = stockModelIdFor("F5J");
+
 function buildServices(capturedScores: CapturedScoresProvider = new NoScoresYetProvider()) {
   const eventStore = new EventStore(":memory:");
+  const classModelProjection = new ClassModelProjection();
+  new ClassModelService(eventStore, classModelProjection, {
+    getReferencingCompetitions: () => [],
+  }).seedStockModels();
   const competitionProjection = new CompetitionProjection();
   const competitionService = new CompetitionService(
     eventStore,
     competitionProjection,
+    classModelProjection,
     new AlwaysUnlockedProvider(),
     capturedScores,
   );
@@ -31,6 +43,7 @@ function buildServices(capturedScores: CapturedScoresProvider = new NoScoresYetP
     eventStore,
     projection,
     competitionProjection,
+    classModelProjection,
     competitionService,
   );
   return { eventStore, projection, service, competitionService };
@@ -38,7 +51,7 @@ function buildServices(capturedScores: CapturedScoresProvider = new NoScoresYetP
 
 const sampleTemplate = {
   name: "Club F3J",
-  discipline: "F3J",
+  classModelId: F3J,
   pilotNumbersEnabled: true,
   pilotClassesEnabled: true,
   pilotClasses: ["Open", "Sports"],
@@ -48,7 +61,7 @@ const sampleCompetition = {
   name: "Spring Cup",
   date: "2026-09-12",
   venue: "Rotorua",
-  discipline: "F3K",
+  classModelId: F3K,
   pilotNumbersEnabled: true,
   pilotClassesEnabled: true,
   pilotClasses: ["Junior", "Open"],
@@ -59,7 +72,7 @@ describe("TemplateService", () => {
     const { eventStore, service } = buildServices();
     const created = service.create(sampleTemplate, attribution);
     expect(created.name).toBe("Club F3J");
-    expect(created.discipline).toBe("F3J");
+    expect(created.classModelId).toBe(F3J);
     expect(created.pilotClasses).toEqual(["Open", "Sports"]);
 
     const updated = service.update(
@@ -166,7 +179,7 @@ describe("TemplateService", () => {
       attribution,
     );
     expect(template.name).toBe("From Spring Cup");
-    expect(template.discipline).toBe("F3K");
+    expect(template.classModelId).toBe(F3K);
     expect(template.pilotNumbersEnabled).toBe(true);
     expect(template.pilotClassesEnabled).toBe(true);
     expect(template.pilotClasses).toEqual(["Junior", "Open"]);
@@ -209,7 +222,7 @@ describe("TemplateService", () => {
     expect(competition.name).toBe("Autumn Open");
     expect(competition.date).toBe("2026-11-07");
     expect(competition.venue).toBe("Taupo");
-    expect(competition.discipline).toBe("F3J");
+    expect(competition.classModelId).toBe(F3J);
     expect(competition.pilotNumbersEnabled).toBe(true);
     expect(competition.pilotClassesEnabled).toBe(true);
     expect(competition.pilotClasses).toEqual(["Open", "Sports"]);
@@ -219,7 +232,7 @@ describe("TemplateService", () => {
     expect(competitionService.list().map((c) => c.id)).toContain(competition.id);
     const edited = competitionService.update(
       competition.id,
-      { ...sampleCompetition, name: "Autumn Open v2", discipline: "F3J" },
+      { ...sampleCompetition, name: "Autumn Open v2", classModelId: F3J },
       attribution,
     );
     expect(edited.name).toBe("Autumn Open v2");
@@ -257,8 +270,8 @@ describe("TemplateService", () => {
     ).toThrow(TemplateNotFoundError);
   });
 
-  it("AC3: the discipline guard applies to a seeded competition unchanged", () => {
-    // Unlocked / score-free: the seeded competition's discipline is editable.
+  it("AC3: the class-change guard applies to a seeded competition unchanged", () => {
+    // Unlocked / score-free: the seeded competition's class is editable.
     const free = buildServices();
     const freeTemplate = free.service.create(sampleTemplate, attribution);
     const freeCompetition = free.service.seedCompetition(
@@ -268,10 +281,10 @@ describe("TemplateService", () => {
     );
     const changed = free.competitionService.update(
       freeCompetition.id,
-      { name: "Editable", date: "2026-11-07", discipline: "F5J" },
+      { name: "Editable", date: "2026-11-07", classModelId: F5J },
       attribution,
     );
-    expect(changed.discipline).toBe("F5J");
+    expect(changed.classModelId).toBe(F5J);
 
     // With captured scores: the existing guard fires.
     const guarded = buildServices({ hasCapturedScores: () => true });
@@ -284,7 +297,7 @@ describe("TemplateService", () => {
     expect(() =>
       guarded.competitionService.update(
         guardedCompetition.id,
-        { name: "Guarded", date: "2026-11-07", discipline: "F5J" },
+        { name: "Guarded", date: "2026-11-07", classModelId: F5J },
         attribution,
       ),
     ).toThrow(CompetitionDisciplineLockedError);
@@ -332,7 +345,7 @@ describe("TemplateService", () => {
       {
         name: "Seeded",
         date: "2026-01-10",
-        discipline: "F3J",
+        classModelId: F3J,
         pilotNumbersEnabled: true,
         pilotClassesEnabled: true,
         pilotClasses: ["Solo"],

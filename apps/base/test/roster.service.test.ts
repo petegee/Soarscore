@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import crypto from "node:crypto";
-import type { Attribution, Competition } from "@soarscore/shared";
+import { stockModelIdFor, type Attribution, type Competition } from "@soarscore/shared";
 import { EventStore } from "../src/eventstore/event-store.js";
 import { PilotLibraryProjection } from "../src/pilots/projection.js";
 import { CompetitionProjection } from "../src/competitions/projection.js";
@@ -59,7 +59,7 @@ function setup(overrides?: {
       name: "Spring Cup",
       date: "2026-09-12",
       venue: null,
-      discipline: "F3J",
+      classModelId: stockModelIdFor("F3J"),
       pilotNumbersEnabled: false,
       pilotClassesEnabled: false,
       pilotClasses: [],

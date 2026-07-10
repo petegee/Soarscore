@@ -1,23 +1,24 @@
 import { useState, type FormEvent } from "react";
-import { DISCIPLINES, type Competition, type Discipline } from "@soarscore/shared";
+import type { Competition, ContestClassModel } from "@soarscore/shared";
 
 export interface CompetitionFormValues {
   name: string;
   date: string;
   venue: string;
-  discipline: Discipline | "";
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];
 }
 
-// Payload sent to the base on save (POST create / PUT edit). Discipline rides
-// both paths (RD5); pilotClasses is discarded server-side when the toggle is off.
+// Payload sent to the base on save (POST create / PUT edit). The class-model
+// reference rides both paths (RD5); pilotClasses is discarded server-side when
+// the toggle is off.
 export interface CompetitionSubmitValues {
   name: string;
   date: string;
   venue: string;
-  discipline: Discipline | "";
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];
@@ -29,7 +30,7 @@ function competitionToFormValues(competition?: Competition): CompetitionFormValu
       name: "",
       date: "",
       venue: "",
-      discipline: "",
+      classModelId: "",
       pilotNumbersEnabled: false,
       pilotClassesEnabled: false,
       pilotClasses: [],
@@ -39,7 +40,7 @@ function competitionToFormValues(competition?: Competition): CompetitionFormValu
     name: competition.name,
     date: competition.date,
     venue: competition.venue ?? "",
-    discipline: competition.discipline,
+    classModelId: competition.classModelId,
     pilotNumbersEnabled: competition.pilotNumbersEnabled,
     pilotClassesEnabled: competition.pilotClassesEnabled,
     pilotClasses: competition.pilotClasses,
@@ -48,12 +49,19 @@ function competitionToFormValues(competition?: Competition): CompetitionFormValu
 
 export interface CompetitionFormProps {
   competition?: Competition;
+  classModels: ContestClassModel[];
   fieldErrors?: Record<string, string[]>;
   onSubmit: (values: CompetitionSubmitValues) => void;
   onCancel: () => void;
 }
 
-export function CompetitionForm({ competition, fieldErrors, onSubmit, onCancel }: CompetitionFormProps) {
+export function CompetitionForm({
+  competition,
+  classModels,
+  fieldErrors,
+  onSubmit,
+  onCancel,
+}: CompetitionFormProps) {
   const [values, setValues] = useState<CompetitionFormValues>(() =>
     competitionToFormValues(competition),
   );
@@ -64,7 +72,7 @@ export function CompetitionForm({ competition, fieldErrors, onSubmit, onCancel }
       name: values.name,
       date: values.date,
       venue: values.venue,
-      discipline: values.discipline,
+      classModelId: values.classModelId,
       pilotNumbersEnabled: values.pilotNumbersEnabled,
       pilotClassesEnabled: values.pilotClassesEnabled,
       // Drop blanks here too; the base is authoritative on dedupe/discard.
@@ -148,25 +156,26 @@ export function CompetitionForm({ competition, fieldErrors, onSubmit, onCancel }
         </p>
       )}
 
-      <label htmlFor="competition-discipline">Discipline (required)</label>
+      <label htmlFor="competition-class-model">Contest class (required)</label>
       <select
-        id="competition-discipline"
-        value={values.discipline}
-        onChange={(event) => update("discipline", event.target.value as Discipline | "")}
+        id="competition-class-model"
+        value={values.classModelId}
+        onChange={(event) => update("classModelId", event.target.value)}
         required
       >
         <option value="" disabled>
-          Select a discipline…
+          Select a contest class…
         </option>
-        {DISCIPLINES.map((discipline) => (
-          <option key={discipline} value={discipline}>
-            {discipline}
+        {classModels.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.name}
+            {model.origin === "stock" ? " (FAI stock)" : ""}
           </option>
         ))}
       </select>
-      {fieldErrors?.discipline && (
+      {fieldErrors?.classModelId && (
         <p role="alert" className="field-error">
-          {fieldErrors.discipline.join(", ")}
+          {fieldErrors.classModelId.join(", ")}
         </p>
       )}
 

@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { DISCIPLINES, type ContestTemplate, type Discipline } from "@soarscore/shared";
+import type { ContestTemplate, ContestClassModel } from "@soarscore/shared";
 
 export interface TemplateFormValues {
   name: string;
-  discipline: Discipline | "";
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];
@@ -14,7 +14,7 @@ export interface TemplateFormValues {
 // server-side when the toggle is off.
 export interface TemplateSubmitValues {
   name: string;
-  discipline: Discipline | "";
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];
@@ -24,7 +24,7 @@ function templateToFormValues(template?: ContestTemplate): TemplateFormValues {
   if (!template) {
     return {
       name: "",
-      discipline: "",
+      classModelId: "",
       pilotNumbersEnabled: false,
       pilotClassesEnabled: false,
       pilotClasses: [],
@@ -32,7 +32,7 @@ function templateToFormValues(template?: ContestTemplate): TemplateFormValues {
   }
   return {
     name: template.name,
-    discipline: template.discipline,
+    classModelId: template.classModelId,
     pilotNumbersEnabled: template.pilotNumbersEnabled,
     pilotClassesEnabled: template.pilotClassesEnabled,
     pilotClasses: template.pilotClasses,
@@ -41,19 +41,26 @@ function templateToFormValues(template?: ContestTemplate): TemplateFormValues {
 
 export interface TemplateFormProps {
   template?: ContestTemplate;
+  classModels: ContestClassModel[];
   fieldErrors?: Record<string, string[]>;
   onSubmit: (values: TemplateSubmitValues) => void;
   onCancel: () => void;
 }
 
-export function TemplateForm({ template, fieldErrors, onSubmit, onCancel }: TemplateFormProps) {
+export function TemplateForm({
+  template,
+  classModels,
+  fieldErrors,
+  onSubmit,
+  onCancel,
+}: TemplateFormProps) {
   const [values, setValues] = useState<TemplateFormValues>(() => templateToFormValues(template));
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     onSubmit({
       name: values.name,
-      discipline: values.discipline,
+      classModelId: values.classModelId,
       pilotNumbersEnabled: values.pilotNumbersEnabled,
       pilotClassesEnabled: values.pilotClassesEnabled,
       // Drop blanks here too; the base is authoritative on dedupe/discard.
@@ -111,25 +118,26 @@ export function TemplateForm({ template, fieldErrors, onSubmit, onCancel }: Temp
         </p>
       )}
 
-      <label htmlFor="template-discipline">Discipline (required)</label>
+      <label htmlFor="template-class-model">Contest class (required)</label>
       <select
-        id="template-discipline"
-        value={values.discipline}
-        onChange={(event) => update("discipline", event.target.value as Discipline | "")}
+        id="template-class-model"
+        value={values.classModelId}
+        onChange={(event) => update("classModelId", event.target.value)}
         required
       >
         <option value="" disabled>
-          Select a discipline…
+          Select a contest class…
         </option>
-        {DISCIPLINES.map((discipline) => (
-          <option key={discipline} value={discipline}>
-            {discipline}
+        {classModels.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.name}
+            {model.origin === "stock" ? " (FAI stock)" : ""}
           </option>
         ))}
       </select>
-      {fieldErrors?.discipline && (
+      {fieldErrors?.classModelId && (
         <p role="alert" className="field-error">
-          {fieldErrors.discipline.join(", ")}
+          {fieldErrors.classModelId.join(", ")}
         </p>
       )}
 

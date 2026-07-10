@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stockModelIdFor } from "@soarscore/shared";
 import { buildApp } from "../src/app.js";
 import type {
   DrawStateProvider,
@@ -20,7 +21,13 @@ async function createCompetition(app: App, fields?: Record<string, unknown>) {
   const response = await app.inject({
     method: "POST",
     url: "/api/competitions",
-    payload: { name: "Spring Cup", date: "2026-09-12", venue: null, discipline: "F3J", ...fields },
+    payload: {
+      name: "Spring Cup",
+      date: "2026-09-12",
+      venue: null,
+      classModelId: stockModelIdFor("F3J"),
+      ...fields,
+    },
   });
   return response.json().id as string;
 }

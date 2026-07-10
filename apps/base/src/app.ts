@@ -8,13 +8,14 @@ import { PilotLibraryProjection } from "./pilots/projection.js";
 import type { RosterReferenceChecker } from "./pilots/roster-reference-checker.js";
 import { PilotService } from "./pilots/service.js";
 import { DomainError, NotFoundError, ReferencedPilotError, ValidationError } from "./pilots/errors.js";
-import { LandingTableProjection } from "./landing-tables/projection.js";
+import { ClassModelProjection } from "./class-models/projection.js";
+import { ClassModelService } from "./class-models/service.js";
+import { ProjectionClassModelReferenceChecker } from "./class-models/class-model-reference-checker.js";
 import {
-  NoTaskConfigYetChecker,
-  type LandingTableReferenceChecker,
-} from "./landing-tables/table-reference-checker.js";
-import { LandingTableService } from "./landing-tables/service.js";
-import { LandingTableNotFoundError, ReferencedLandingTableError } from "./landing-tables/errors.js";
+  ClassModelNotFoundError,
+  ReferencedClassModelError,
+  StockModelReadonlyError,
+} from "./class-models/errors.js";
 import { CompetitionProjection } from "./competitions/projection.js";
 import {
   AlwaysUnlockedProvider,
@@ -53,7 +54,7 @@ import {
 } from "./roster/errors.js";
 import { registerPilotRoutes } from "./routes/pilots.js";
 import { registerRosterRoutes } from "./routes/roster.js";
-import { registerLandingTableRoutes } from "./routes/landing-tables.js";
+import { registerClassModelRoutes } from "./routes/class-models.js";
 import { registerCompetitionRoutes } from "./routes/competitions.js";
 import { registerTemplateRoutes } from "./routes/templates.js";
 import { registerHealthRoute } from "./routes/health.js";
@@ -66,9 +67,6 @@ export interface AppOptions {
   // Override seam (tests): production now defaults to the roster-backed
   // ProjectionRosterReferenceChecker (STORY-001-005 / RD1).
   referenceChecker?: RosterReferenceChecker;
-  // Test seam: STORY-001-008 will supply a real checker; production always
-  // uses NoTaskConfigYetChecker until task scoring config exists.
-  landingTableReferenceChecker?: LandingTableReferenceChecker;
   // Test seam: the CD-lock story will supply a real provider; production always
   // uses AlwaysUnlockedProvider until lock/unlock exists.
   lockStateProvider?: LockStateProvider;
@@ -99,8 +97,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // from roster + competition state (RD1).
   const projection = new PilotLibraryProjection();
   projection.rebuild(eventStore.readAll());
-  const landingTableProjection = new LandingTableProjection();
-  landingTableProjection.rebuild(eventStore.readAll());
+  const classModelProjection = new ClassModelProjection();
+  classModelProjection.rebuild(eventStore.readAll());
   const competitionProjection = new CompetitionProjection();
   competitionProjection.rebuild(eventStore.readAll());
   const rosterProjection = new RosterProjection();
@@ -115,15 +113,20 @@ export function buildApp(options: AppOptions): FastifyInstance {
       new ProjectionRosterReferenceChecker(rosterProjection, competitionProjection),
   );
 
-  const landingTableService = new LandingTableService(
+  // Class models: an in-use model cannot be deleted (AC9), answered from real
+  // competition state. Seed the six stock models once the projection has
+  // rebuilt from the log — idempotent, so restarts add no duplicates (AC1).
+  const classModelService = new ClassModelService(
     eventStore,
-    landingTableProjection,
-    options.landingTableReferenceChecker ?? new NoTaskConfigYetChecker(),
+    classModelProjection,
+    new ProjectionClassModelReferenceChecker(competitionProjection),
   );
+  classModelService.seedStockModels();
 
   const competitionService = new CompetitionService(
     eventStore,
     competitionProjection,
+    classModelProjection,
     options.lockStateProvider ?? new AlwaysUnlockedProvider(),
     options.capturedScoresProvider ?? new NoScoresYetProvider(),
   );
@@ -134,6 +137,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     eventStore,
     templateProjection,
     competitionProjection,
+    classModelProjection,
     competitionService,
   );
 
@@ -149,7 +153,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
   registerHealthRoute(app);
   registerPilotRoutes(app, pilotService);
-  registerLandingTableRoutes(app, landingTableService);
+  registerClassModelRoutes(app, classModelService);
   registerCompetitionRoutes(app, competitionService);
   registerTemplateRoutes(app, templateService);
   registerRosterRoutes(app, rosterService);
@@ -188,11 +192,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
       } satisfies ErrorResponse);
       return;
     }
-    if (error instanceof LandingTableNotFoundError) {
+    if (error instanceof ClassModelNotFoundError) {
       reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }
-    if (error instanceof ReferencedLandingTableError) {
+    if (error instanceof StockModelReadonlyError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof ReferencedClassModelError) {
       reply.code(409).send({
         code: error.code,
         message: error.message,

@@ -12,6 +12,7 @@ import {
 import type { EventStore } from "../eventstore/event-store.js";
 import type { TemplateProjection } from "./projection.js";
 import type { CompetitionProjection } from "../competitions/projection.js";
+import type { ClassModelProjection } from "../class-models/projection.js";
 import type { CompetitionService } from "../competitions/service.js";
 import { CompetitionNotFoundError } from "../competitions/errors.js";
 import { TemplateNotFoundError, ValidationError } from "./errors.js";
@@ -23,6 +24,7 @@ export class TemplateService {
     private readonly eventStore: EventStore,
     private readonly projection: TemplateProjection,
     private readonly competitionProjection: CompetitionProjection,
+    private readonly classModelProjection: ClassModelProjection,
     private readonly competitionService: CompetitionService,
   ) {}
 
@@ -39,10 +41,11 @@ export class TemplateService {
   create(input: unknown, attribution: Attribution): ContestTemplate {
     const parsed = parseOrThrow(createContestTemplateRequestSchema, input);
     this.assertNameAvailable(parsed.name);
+    this.assertClassModelExists(parsed.classModelId);
     const template: ContestTemplate = {
       id: crypto.randomUUID(),
       name: parsed.name,
-      discipline: parsed.discipline,
+      classModelId: parsed.classModelId,
       pilotNumbersEnabled: parsed.pilotNumbersEnabled,
       pilotClassesEnabled: parsed.pilotClassesEnabled,
       pilotClasses: parsed.pilotClasses,
@@ -65,10 +68,11 @@ export class TemplateService {
     const parsed = parseOrThrow(updateContestTemplateRequestSchema, input);
     // Excluding the template itself keeps case-only renames of its own name legal.
     this.assertNameAvailable(parsed.name, id);
+    this.assertClassModelExists(parsed.classModelId);
     const template: ContestTemplate = {
       id,
       name: parsed.name,
-      discipline: parsed.discipline,
+      classModelId: parsed.classModelId,
       pilotNumbersEnabled: parsed.pilotNumbersEnabled,
       pilotClassesEnabled: parsed.pilotClassesEnabled,
       pilotClasses: parsed.pilotClasses,
@@ -118,7 +122,7 @@ export class TemplateService {
     const template: ContestTemplate = {
       id: crypto.randomUUID(),
       name: parsed.name,
-      discipline: source.discipline,
+      classModelId: source.classModelId,
       pilotNumbersEnabled: source.pilotNumbersEnabled,
       pilotClassesEnabled: source.pilotClassesEnabled,
       pilotClasses: [...source.pilotClasses],
@@ -149,7 +153,7 @@ export class TemplateService {
         name: body.name,
         date: body.date,
         venue: body.venue,
-        discipline: template.discipline,
+        classModelId: template.classModelId,
         pilotNumbersEnabled: template.pilotNumbersEnabled,
         pilotClassesEnabled: template.pilotClassesEnabled,
         pilotClasses: [...template.pilotClasses],
@@ -181,6 +185,17 @@ export class TemplateService {
       throw new ValidationError("Validation failed", {
         formErrors: [],
         fieldErrors: { name: [`A template named "${existing.name}" already exists`] },
+      });
+    }
+  }
+
+  // A template must reference an existing class model (D12) so a seeded
+  // competition inherits a real model. Field-named for the class selector.
+  private assertClassModelExists(classModelId: string): void {
+    if (!this.classModelProjection.getById(classModelId)) {
+      throw new ValidationError("Validation failed", {
+        formErrors: [],
+        fieldErrors: { classModelId: ["Selected contest class no longer exists"] },
       });
     }
   }

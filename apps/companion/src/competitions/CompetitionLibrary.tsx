@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Competition } from "@soarscore/shared";
+import type { Competition, ContestClassModel } from "@soarscore/shared";
 import { apiRequest, ApiError } from "../api/client.js";
 import type { Actor } from "../identity/useActor.js";
 import { CompetitionForm, type CompetitionSubmitValues } from "./CompetitionForm.js";
@@ -11,6 +11,9 @@ interface EditState {
 
 export function CompetitionLibrary({ actor }: { actor: Actor }) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
+  // The class-model catalogue populates the form selector and maps a
+  // competition's classModelId to a display name in the table.
+  const [classModels, setClassModels] = useState<ContestClassModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
@@ -37,15 +40,21 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await apiRequest<Competition[]>("/api/competitions", {
-        actorName,
-        clientId: actor.clientId,
-      });
-      setCompetitions(result);
+      const [comps, models] = await Promise.all([
+        apiRequest<Competition[]>("/api/competitions", { actorName, clientId: actor.clientId }),
+        apiRequest<ContestClassModel[]>("/api/class-models", {
+          actorName,
+          clientId: actor.clientId,
+        }),
+      ]);
+      setCompetitions(comps);
+      setClassModels(models);
     } finally {
       setLoading(false);
     }
   }, [actorName, actor.clientId]);
+
+  const classModelName = (id: string) => classModels.find((m) => m.id === id)?.name ?? "—";
 
   useEffect(() => {
     refresh();
@@ -77,7 +86,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
         // captured scores is refused; surface it against the discipline field.
         if (error.response.code === "COMPETITION_DISCIPLINE_LOCKED") {
           setFieldErrors({
-            discipline: ["Cannot change the discipline once scores are captured"],
+            classModelId: ["Cannot change the contest class once scores are captured"],
           });
           return;
         }
@@ -160,6 +169,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
     return (
       <CompetitionForm
         competition={editState.competition}
+        classModels={classModels}
         fieldErrors={fieldErrors}
         onSubmit={handleSubmit}
         onCancel={() => {
@@ -192,7 +202,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
                 <th>Name</th>
                 <th>Date</th>
                 <th>Venue</th>
-                <th>Discipline</th>
+                <th>Class</th>
                 <th></th>
               </tr>
             </thead>
@@ -202,7 +212,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
                   <td>{competition.name}</td>
                   <td>{competition.date}</td>
                   <td>{competition.venue ?? "—"}</td>
-                  <td>{competition.discipline}</td>
+                  <td>{classModelName(competition.classModelId)}</td>
                   <td>
                     <div className="row-actions">
                       <button

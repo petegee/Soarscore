@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { stockModelIdFor } from "@soarscore/shared";
 import { buildApp } from "../src/app.js";
 
 function makeApp() {
   return buildApp({ dbPath: ":memory:" });
 }
 
+const F3J = stockModelIdFor("F3J");
+const F3K = stockModelIdFor("F3K");
+
 const templatePayload = {
   name: "Club F3J",
-  discipline: "F3J",
+  classModelId: F3J,
   pilotNumbersEnabled: true,
   pilotClassesEnabled: true,
   pilotClasses: ["Open", "Sports"],
@@ -17,7 +21,7 @@ const competitionPayload = {
   name: "Spring Cup",
   date: "2026-09-12",
   venue: "Rotorua",
-  discipline: "F3K",
+  classModelId: F3K,
   pilotNumbersEnabled: true,
   pilotClassesEnabled: true,
   pilotClasses: ["Junior", "Open"],
@@ -32,7 +36,7 @@ describe("template routes", () => {
       payload: templatePayload,
     });
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toMatchObject({ name: "Club F3J", discipline: "F3J" });
+    expect(response.json()).toMatchObject({ name: "Club F3J", classModelId: F3J });
 
     const list = await app.inject({ method: "GET", url: "/api/templates" });
     expect(list.json()).toHaveLength(1);
@@ -98,7 +102,7 @@ describe("template routes", () => {
     const template = response.json();
     expect(template).toMatchObject({
       name: "From Spring Cup",
-      discipline: "F3K",
+      classModelId: F3K,
       pilotNumbersEnabled: true,
       pilotClassesEnabled: true,
       pilotClasses: ["Junior", "Open"],
@@ -138,7 +142,7 @@ describe("template routes", () => {
       name: "Autumn Open",
       date: "2026-11-07",
       venue: "Taupo",
-      discipline: "F3J",
+      classModelId: F3J,
       pilotNumbersEnabled: true,
       pilotClassesEnabled: true,
       pilotClasses: ["Open", "Sports"],

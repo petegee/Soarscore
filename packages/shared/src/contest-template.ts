@@ -4,7 +4,6 @@ import {
   competitionIdentityFields,
   normalisePilotClasses,
   pilotClassesRefinement,
-  type Discipline,
 } from "./competition.js";
 
 // A reusable configuration snapshot (RD4: copy-on-seed, never a live link).
@@ -13,7 +12,9 @@ import {
 export interface ContestTemplate {
   id: string;
   name: string;
-  discipline: Discipline;
+  // A template snapshots a class-model reference, not a bare discipline (D12),
+  // so a seeded competition inherits a model, never an enum.
+  classModelId: string;
   pilotNumbersEnabled: boolean;
   pilotClassesEnabled: boolean;
   pilotClasses: string[];

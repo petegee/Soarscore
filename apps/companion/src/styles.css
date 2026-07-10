@@ -262,6 +262,24 @@ h1 {
   padding: var(--space-4) 0;
 }
 
+/* Read-only "FAI stock" marker on a class model, and the clone-to-vary hint. */
+.badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 0.4em;
+  border-radius: 0.25rem;
+  background: var(--color-text-muted);
+  color: #fff;
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
 /* ---- Dialog (delete confirmation) ---- */
 
 .dialog-backdrop {

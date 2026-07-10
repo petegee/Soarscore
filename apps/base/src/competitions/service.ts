@@ -9,6 +9,7 @@ import {
 } from "@soarscore/shared";
 import type { EventStore } from "../eventstore/event-store.js";
 import type { CompetitionProjection } from "./projection.js";
+import type { ClassModelProjection } from "../class-models/projection.js";
 import type { CapturedScoresProvider, LockStateProvider } from "./state-providers.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
@@ -28,6 +29,7 @@ export class CompetitionService {
   constructor(
     private readonly eventStore: EventStore,
     private readonly projection: CompetitionProjection,
+    private readonly classModelProjection: ClassModelProjection,
     private readonly lockState: LockStateProvider,
     private readonly capturedScores: CapturedScoresProvider,
   ) {}
@@ -44,13 +46,14 @@ export class CompetitionService {
 
   create(input: unknown, attribution: Attribution): Competition {
     const parsed = parseOrThrow(createCompetitionRequestSchema, input);
+    this.assertClassModelExists(parsed.classModelId);
     // Schema has already deduped / discarded pilotClasses per the toggle.
     const competition: Competition = {
       id: crypto.randomUUID(),
       name: parsed.name,
       date: parsed.date,
       venue: parsed.venue ?? null,
-      discipline: parsed.discipline,
+      classModelId: parsed.classModelId,
       pilotNumbersEnabled: parsed.pilotNumbersEnabled,
       pilotClassesEnabled: parsed.pilotClassesEnabled,
       pilotClasses: parsed.pilotClasses,
@@ -72,17 +75,19 @@ export class CompetitionService {
       throw new CompetitionNotFoundError(`Competition ${id} not found`);
     }
     const parsed = parseOrThrow(updateCompetitionRequestSchema, input);
-    // Discipline-change guard (RD2/RD5): fires only when the submitted discipline
+    this.assertClassModelExists(parsed.classModelId);
+    // Class-change guard (RD2/RD5): fires only when the submitted class model
     // differs from the stored one. Ordered locked → captured-scores so a
     // locked-with-scores competition reports locked. No acknowledgment flag; an
-    // unchanged discipline or a pure identity/toggle edit passes freely.
-    if (parsed.discipline !== existing.discipline) {
+    // unchanged class or a pure identity/toggle edit passes freely. The richer
+    // change-with-scores selection UX is STORY-001-004.
+    if (parsed.classModelId !== existing.classModelId) {
       if (this.lockState.isLocked(id)) {
-        throw new CompetitionLockedError("Cannot change the discipline of a locked competition");
+        throw new CompetitionLockedError("Cannot change the contest class of a locked competition");
       }
       if (this.capturedScores.hasCapturedScores(id)) {
         throw new CompetitionDisciplineLockedError(
-          "Cannot change the discipline once scores are captured",
+          "Cannot change the contest class once scores are captured",
         );
       }
     }
@@ -93,7 +98,7 @@ export class CompetitionService {
       name: parsed.name,
       date: parsed.date,
       venue: parsed.venue ?? null,
-      discipline: parsed.discipline,
+      classModelId: parsed.classModelId,
       pilotNumbersEnabled: parsed.pilotNumbersEnabled,
       pilotClassesEnabled: parsed.pilotClassesEnabled,
       pilotClasses: parsed.pilotClasses,
@@ -107,6 +112,18 @@ export class CompetitionService {
     });
     this.projection.apply(record);
     return competition;
+  }
+
+  // A competition must reference an existing class model (AC8). Checked against
+  // the class-model projection at command time (Zod cannot see sibling
+  // aggregates); field-named so the companion surfaces it on the class selector.
+  private assertClassModelExists(classModelId: string): void {
+    if (!this.classModelProjection.getById(classModelId)) {
+      throw new ValidationError("Validation failed", {
+        formErrors: [],
+        fieldErrors: { classModelId: ["Selected contest class no longer exists"] },
+      });
+    }
   }
 
   delete(id: string, req: DeleteCompetitionRequest, attribution: Attribution): void {

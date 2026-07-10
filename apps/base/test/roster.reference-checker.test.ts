@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stockModelIdFor } from "@soarscore/shared";
 import { buildApp } from "../src/app.js";
 
 // RD1 closed end-to-end: buildApp's default checker now answers from real
@@ -13,7 +14,7 @@ async function createCompetition(app: App, name: string) {
   const response = await app.inject({
     method: "POST",
     url: "/api/competitions",
-    payload: { name, date: "2026-09-12", venue: null, discipline: "F3J" },
+    payload: { name, date: "2026-09-12", venue: null, classModelId: stockModelIdFor("F3J") },
   });
   return response.json().id as string;
 }

@@ -169,10 +169,16 @@ it does not build or default it.
 - **Discipline** (`packages/shared/src/competition.ts`): still the key that
   selects a class model; under D12 the model, not this enum, carries the
   numbers the computation reads.
-- **Contest Class Model** (STORY-001-016, in progress): the injected source of
-  the group-score basis (best = 1000, inverted-for-speed marker, F3B
-  separate-per-task marker), drop-worst rule (threshold + unit), and
-  points-per-second. This story treats it as a read-only input contract.
+- **Contest Class Model** (`packages/shared/src/class-model.ts`, **shipped by
+  STORY-001-016**): the injected, read-only input. Its concrete shape —
+  `basis: "single-group" | "separate-per-task"`, `speedInverted`,
+  `dropWorst: { threshold, unit: "round" | "task" }`, `landingTable`, and
+  `pointsPerSecond: number | null` — is now the stable contract 007 reads.
+  007 consumes `basis`, `speedInverted` and `dropWorst`; **`pointsPerSecond`
+  is *not* consumed by 007** — it builds the *raw* flight score upstream
+  (per-task assembly, STORY-001-008), which 007's normaliser takes as input.
+  The model carries **no normalised-score rounding field** (see the rounding
+  decision below).
 - **Score-binding rule / pilot-keyed aggregation**
   (`apps/base/src/roster/state-providers.ts`): a pinned domain rule — every
   captured score records the occupant's `pilotId` at capture time, and
@@ -254,15 +260,18 @@ it does not build or default it.
   compose cleanly, isolate the F3B round-derivation difference, and let AC6/AC7
   test the normaliser directly and AC5/AC8 test the aggregate directly. →
   **Recommend three composable functions.**
-- **Model contract coupling**: these functions need a *shape* from
-  STORY-001-016 that may not be finalised. → **Recommend defining a minimal
-  input contract** (basis kind, inverted flag, F3B-separate flag, drop-worst
-  threshold + unit, points-per-second) consumed structurally, so 007 is not
-  blocked on 016's full model but stays compatible.
-- **Rounding/precision placement**: per-class rounding differs (whole point,
-  0.1). Precision is a model value; the normaliser applies it. → **Recommend
-  the function takes precision from the model and rounds at the normalisation
-  boundary**, with rule-boundary tests pinning the contract.
+- **Model contract coupling — now resolved**: STORY-001-016 shipped the
+  concrete `ContestClassModel`. 007's functions consume it structurally
+  (`basis`, `speedInverted`, `dropWorst`); no separate contract needs
+  inventing. `pointsPerSecond` stays out of 007 (upstream raw-score assembly).
+- **Rounding/precision placement — DECISION (carried into the canvas as a
+  noted constraint)**: general rules §3 says normalised-score rounding differs
+  by class, but the shipped model carries **no rounding field**. Rather than
+  reopen 016 to add one the six MVP classes barely differ on, **007 rounds to
+  whole points as the shared default and accepts an *optional* caller-supplied
+  precision**; any genuine per-class rounding refinement is deferred to the
+  per-discipline stories (and, if ever needed, added to the model additively
+  per NFR-2). Rule-boundary tests pin the default contract.
 - **Number representation**: ratio scaling risks float drift at boundaries. →
   **Recommend explicit rounding at defined points + boundary tests**; decide
   integer-cents-style vs rounded-float in REASONS Canvas.
@@ -282,10 +291,12 @@ it does not build or default it.
 
 ### Requirement Ambiguities
 
-- **Class-model input contract not yet frozen** (STORY-001-016 in progress):
-  this story needs a stable minimal shape (basis, inverted flag, F3B-separate
-  flag, drop-worst threshold + unit, points-per-second, precision). Must be
-  agreed as a contract or 007 risks churn against 016.
+- **Class-model input contract — RESOLVED**: STORY-001-016 shipped
+  `ContestClassModel` (`basis`, `speedInverted`, `pointsPerSecond | null`,
+  `dropWorst { threshold, unit }`, `landingTable | null`). 007 consumes
+  `basis` / `speedInverted` / `dropWorst`; `pointsPerSecond` is upstream
+  (008). No churn risk remains. The one residual gap — normalised-score
+  rounding is not modelled — is settled by the rounding decision above.
 - **F3B computational depth vs STORY-001-008**: AC2's model-display half is
   016's; the *computational* half (three separate normalisations summed) is
   007's, but the per-task raw-score assembly is 008's. The boundary — 007
@@ -321,8 +332,9 @@ it does not build or default it.
 - **Floating-point drift** in ratio scaling and per-class rounding at rule
   boundaries: mitigation — explicit rounding at defined boundaries plus
   boundary-value tests.
-- **Contract drift with STORY-001-016**: mitigation — a small structural input
-  type consumed by these functions, reviewed against 016's model.
+- **Contract drift with STORY-001-016 — closed**: 016's `ContestClassModel` is
+  shipped and stable; 007 consumes it directly. Residual coupling is only the
+  unmodelled rounding precision, settled by the rounding decision.
 - **First test suite in `packages/shared`**: no precedent there (tests live in
   `apps/base/test`); mitigation — follow the existing vitest style, colocate a
   `*.test.ts` the root `vitest run` already globs.

@@ -1,4 +1,4 @@
-import type { Competition, Discipline } from "@soarscore/shared";
+import { stockModelIdFor, type Competition, type Discipline } from "@soarscore/shared";
 import type { EventRecord } from "../eventstore/event-store.js";
 
 // Registry/lifecycle events file under one fixed scope; content events (roster,
@@ -23,17 +23,24 @@ export class CompetitionProjection {
           name: string;
           date: string;
           venue: string | null;
-          discipline: Discipline;
+          // New events carry classModelId; legacy events carry discipline only.
+          classModelId?: string;
+          discipline?: Discipline;
           pilotNumbersEnabled: boolean;
           pilotClassesEnabled: boolean;
           pilotClasses: string[];
         };
+        // Back-fill (D12): resolve a legacy discipline payload to its stock
+        // model on rebuild — no log rewrite; current state stays derivable.
+        const classModelId =
+          payload.classModelId ??
+          (payload.discipline ? stockModelIdFor(payload.discipline) : "");
         this.competitions.set(payload.id, {
           id: payload.id,
           name: payload.name,
           date: payload.date,
           venue: payload.venue,
-          discipline: payload.discipline,
+          classModelId,
           pilotNumbersEnabled: payload.pilotNumbersEnabled,
           pilotClassesEnabled: payload.pilotClassesEnabled,
           pilotClasses: payload.pilotClasses,
