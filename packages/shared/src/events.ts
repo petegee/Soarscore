@@ -5,6 +5,7 @@ import type { ContestClassModel, TaskParameterSet } from "./class-model.js";
 import type { ContestTemplate } from "./contest-template.js";
 import type { RosterEntry } from "./roster.js";
 import type { CompetitionTaskConfig } from "./task-config.js";
+import type { DrawSpecification, GeneratedDraw } from "./draw.js";
 
 export type PilotEventType = "pilot.created" | "pilot.updated" | "pilot.deleted";
 
@@ -114,6 +115,7 @@ export function copyTaskParameterSet(task: TaskParameterSet): TaskParameterSet {
     nlhApplicable: task.nlhApplicable,
     nlhCoefficients: task.nlhCoefficients ? { ...task.nlhCoefficients } : null,
     penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
+    minGroupSize: task.minGroupSize,
   };
 }
 
@@ -307,3 +309,16 @@ export function taskConfigToPayload(config: CompetitionTaskConfig): TaskConfigUp
     })),
   };
 }
+
+// Per-competition draw events (STORY-001-009). Like roster and task-config,
+// these are per-competition content events filed under scope = competitionId.
+// draw.specSaved carries the whole validated specification; draw.generated
+// carries the fully materialised outcome (Safeguard 3) — never an RNG seed — so
+// replay reproduces the identical draw with no RNG in the projection (D4). Each
+// success appends a fresh draw.generated: supersede, never mutate (Decision #7).
+export type DrawEventType = "draw.specSaved" | "draw.generated";
+
+export type DrawSpecSavedPayload = DrawSpecification;
+export type DrawGeneratedPayload = GeneratedDraw;
+
+export type DrawEventPayload = DrawSpecSavedPayload | DrawGeneratedPayload;

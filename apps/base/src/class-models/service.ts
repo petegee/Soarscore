@@ -207,6 +207,7 @@ export class ClassModelService {
       nlhApplicable: task.nlhApplicable,
       nlhCoefficients: task.nlhApplicable ? task.nlhCoefficients : null,
       penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
+      minGroupSize: task.minGroupSize,
     };
   }
 

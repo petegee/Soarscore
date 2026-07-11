@@ -108,7 +108,7 @@ Producing fair round-by-round flight groups, then validating and adjusting them.
 
 | Sub-area | Description |
 |---|---|
-| 4.1 Draw Specification | Set draw mode, groups-per-round, and consecutive-flight constraints, within bounds implied by roster/task. |
+| 4.1 Draw Specification | Set draw mode, the number of rounds, groups-per-round, and an **optional** consecutive-flight constraint (avoiding back-to-back groups across a round boundary — **off by default**, as club practice does not normally avoid it). **Groups-per-round is bounded both ways:** a per-task class **minimum** (e.g. F3B 5/3/8 by task, F3J/F5J 6, F3K 5 — per the [rule docs](rules/)), and a roster-derived **maximum** of at most half the roster, i.e. **at least two groups per qualifying round**, because the non-flying pilots score the flying group ([decisions.md D1](decisions.md#d1--trust-model-small-known-trusted-group)) — relaxed by an explicit override when spare non-flying scorers are present. A value outside these bounds is rejected with the bound explained. |
 | 4.2 Generate Draw | Produce the flight groups for a chosen number of rounds, retaining the fairest of multiple attempts. Where the roster allows, **avoid producing a group with only one scoring pilot** (see the [5.3](#area-5--scoring) lone-pilot safeguard). |
 | 4.3 Validate Draw | Report matchup distribution and a fairness metric; allow re-draw. |
 | 4.4 Adjust Lanes | Review and manually reassign lane allocations after the draw. |

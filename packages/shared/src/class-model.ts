@@ -89,6 +89,11 @@ export interface TaskParameterSet {
   nlhCoefficients: NlhCoefficients | null;
   // The deduction types this task's rule offers (AC5).
   penaltyTypes: PenaltyType[];
+  // Rule-fixed minimum scoring pilots per flight group for this task (draw,
+  // STORY-001-009 / AC1). null where the class fixes no per-group minimum; the
+  // draw then falls back to the D1 general bound (≥ 2 scoring pilots). Additive
+  // slot only (NFR-2) — no aggregate reshape, no branch on discipline.
+  minGroupSize: number | null;
 }
 
 export interface ContestClassModel {
@@ -216,6 +221,9 @@ function stockTask(
     nlhApplicable: false,
     nlhCoefficients: null,
     penaltyTypes: [],
+    // Default: the class fixes no per-group minimum; a model overrides this
+    // only where its rule doc states one (transcribed with a citation below).
+    minGroupSize: null,
     ...partial,
   };
 }
@@ -244,6 +252,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         name: "Duration",
         timingPrecision: WHOLE_SECOND_TRUNCATED,
         pointsPerSecond: 1,
+        // Min 5 per group for Duration (F3B.1.8b).
+        minGroupSize: 5,
         penaltyTypes: [
           { code: "winch-non-conforming", label: "Non-conforming winch", defaultDeduction: 1000 },
         ],
@@ -254,6 +264,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         id: `${stockModelIdFor("F3B")}-task-distance`,
         name: "Distance",
         timingPrecision: WHOLE_SECOND_TRUNCATED,
+        // Min 3 per group for Distance (F3B.1.8b).
+        minGroupSize: 3,
         penaltyTypes: [
           { code: "winch-non-conforming", label: "Non-conforming winch", defaultDeduction: 1000 },
         ],
@@ -265,6 +277,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         name: "Speed",
         timingPrecision: HUNDREDTH_SECOND,
         speedInverted: true,
+        // Min 8 per group for Speed (F3B.1.8b).
+        minGroupSize: 8,
         penaltyTypes: [
           { code: "safety-plane", label: "Safety-plane crossing", defaultDeduction: 300 },
           { code: "winch-non-conforming", label: "Non-conforming winch", defaultDeduction: 1000 },
@@ -293,6 +307,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         pointsPerSecond: 1,
         landingScored: true,
         landingTable: stockLandingTable("F3J", FINE_LANDING_ENTRIES),
+        // Min 6 per group (F3J.6.1).
+        minGroupSize: 6,
         penaltyTypes: [
           { code: "towline-not-cleared", label: "Towline not cleared within 30 s", defaultDeduction: 100 },
           { code: "winch-non-conforming", label: "Non-conforming winch", defaultDeduction: 1000 },
@@ -322,6 +338,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         name: "Flight time",
         timingPrecision: TENTH_SECOND_TRUNCATED,
         perRoundOverrideAllowed: true,
+        // Min 5 per group (F3K.9.1).
+        minGroupSize: 5,
         penaltyTypes: [
           { code: "outside-window", label: "Flying outside the assigned window", defaultDeduction: 100 },
         ],
@@ -348,6 +366,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         pointsPerSecond: 1,
         landingScored: true,
         landingTable: stockLandingTable("F5J", F5J_LANDING_ENTRIES),
+        // Min 6 per group (5.5.11.14.1).
+        minGroupSize: 6,
         penaltyTypes: [
           { code: "launch-fault", label: "Wrong direction / motor before start / not straight 3 s", defaultDeduction: 100 },
           { code: "safety-area", label: "Safety-area infringement", defaultDeduction: 300 },
@@ -514,6 +534,9 @@ export function deriveDeviations(
     if (!penaltyTypesEqual(task.penaltyTypes, from.penaltyTypes)) {
       note(`${label}.penaltyTypes`, from.penaltyTypes, task.penaltyTypes);
     }
+    if (task.minGroupSize !== from.minGroupSize) {
+      note(`${label}.minGroupSize`, from.minGroupSize, task.minGroupSize);
+    }
   });
   // A source task the custom model dropped is a deviation too.
   source.tasks.forEach((task) => {
@@ -604,6 +627,7 @@ const updateTaskSchema = z.object({
   nlhApplicable: z.boolean(),
   nlhCoefficients: nlhCoefficientsSchema,
   penaltyTypes: z.array(penaltyTypeSchema),
+  minGroupSize: z.number().int().positive().nullable(),
 });
 
 // Clone request: the Organiser supplies only the new name; all rule-fixed values

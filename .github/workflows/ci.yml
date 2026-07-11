@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # `build` runs tsc per workspace, so it doubles as the typecheck.
+      - run: npm run build
+
+  deploy-demo:
+    needs: build-test
+    # Only deploy the demo on a push to the tracked branch, never on PRs.
+    # Keep this branch in sync with `branch:` in render.yaml.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        # Render builds the Docker image from the repo on its side; this only
+        # kicks it off once CI is green. Store the hook URL as a repo secret.
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}

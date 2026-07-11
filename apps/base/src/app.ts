@@ -66,6 +66,14 @@ import { registerClassModelRoutes } from "./routes/class-models.js";
 import { registerCompetitionRoutes } from "./routes/competitions.js";
 import { registerTemplateRoutes } from "./routes/templates.js";
 import { registerTaskConfigRoutes } from "./routes/task-config.js";
+import { DrawProjection } from "./draw/projection.js";
+import { DrawService } from "./draw/service.js";
+import {
+  DrawGenerationFailedError,
+  DrawSpecNotFoundError,
+  GroupSizeOutOfBoundsError,
+} from "./draw/errors.js";
+import { registerDrawRoutes } from "./routes/draw.js";
 import { registerHealthRoute } from "./routes/health.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -118,6 +126,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // parity) and filed under scope = competitionId (STORY-001-008).
   const taskConfigProjection = new CompetitionTaskConfigProjection();
   taskConfigProjection.rebuild(eventStore.readAll());
+  // Draw projection: a pure loader of the materialised outcome (STORY-001-009 /
+  // D4) — rebuilt from the log on init, filed under scope = competitionId.
+  const drawProjection = new DrawProjection();
+  drawProjection.rebuild(eventStore.readAll());
 
   const pilotService = new PilotService(
     eventStore,
@@ -173,6 +185,17 @@ export function buildApp(options: AppOptions): FastifyInstance {
     classModelProjection,
   );
 
+  // Draw: specify a fair-draw policy, generate the fairest candidate over N
+  // rounds, and surface fairness evidence (STORY-001-009). Generate ≠ accept;
+  // the drawStateProvider default stays NoAcceptedDrawProvider (Decision #3).
+  const drawService = new DrawService(
+    eventStore,
+    drawProjection,
+    competitionProjection,
+    classModelProjection,
+    rosterProjection,
+  );
+
   registerHealthRoute(app);
   registerPilotRoutes(app, pilotService);
   registerClassModelRoutes(app, classModelService);
@@ -180,6 +203,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   registerTemplateRoutes(app, templateService);
   registerRosterRoutes(app, rosterService);
   registerTaskConfigRoutes(app, taskConfigService);
+  registerDrawRoutes(app, drawService);
 
   if (options.serveStatic) {
     app.register(fastifyStatic, {
@@ -304,6 +328,18 @@ export function buildApp(options: AppOptions): FastifyInstance {
       error instanceof NlhNotApplicableError
     ) {
       reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof DrawSpecNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof GroupSizeOutOfBoundsError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof DrawGenerationFailedError) {
+      reply.code(422).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }
     if (error instanceof DomainError) {

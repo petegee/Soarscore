@@ -15,9 +15,8 @@ not needed for that lives under "Future Enhancements" in the requirements.
 
 ## Project status
 
-**Requirements/design phase — no application code yet.** The repo is currently
-documentation only. When code lands, update this file with the stack, layout,
-build/test commands, and conventions.
+Currently under active green-field development. There are no current users, 
+and no existing real data that needs to be preserved, or migrated.
 
 ## Repository map
 

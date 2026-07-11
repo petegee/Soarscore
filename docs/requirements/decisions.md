@@ -42,6 +42,22 @@ groups access.
   The dangling "timekeeper count" parameter is removed from 3.7; if
   per-discipline work ever needs FAI officiating fidelity, it reopens this
   deliberately. As with the signed-card waiver, the rule docs are unchanged.
+- *(Added 2026-07-11.)* **A flying group is capped at half the roster.**
+  Because the Scorer is a non-flying pilot (the waiver above) and there is
+  **one Scorer per flying competitor**
+  ([general domain model](../../CLAUDE.md); [Area 5](high-level-requirements.md#area-5--scoring)),
+  a group of *G* flyers needs *G* scorers drawn from the *(roster − G)* pilots
+  not flying it — so **G ≤ roster ÷ 2**, i.e. **every qualifying round has at
+  least two groups**. (Fly-offs — a single group of the top qualifiers — are a
+  [Future Enhancement](high-level-requirements.md#future-enhancements) and are
+  not subject to this floor.) This is an **MVP operational constraint derived
+  from this waiver**,
+  not an FAI rule (the FAI assumes dedicated officials, so a single all-play
+  group is theoretically possible there); the rule docs are unchanged. It
+  bounds the draw's groups-per-round from below
+  ([4.1](high-level-requirements.md#area-4--draw--rounds-generation)). The
+  **exception** — when spare, dedicated non-flying people are present to score —
+  relaxes the cap and is expressed as an explicit draw-specification override.
 
 ## D2 — Scorer device: dedicated ESP32 stopwatch-style handheld
 
