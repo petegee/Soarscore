@@ -4,12 +4,17 @@ import {
   cloneClassModelRequestSchema,
   updateClassModelRequestSchema,
   classModelToCreatedPayload,
+  copyTaskParameterSet,
   deriveDeviations,
   STOCK_CLASS_MODELS,
   type Attribution,
   type ContestClassModel,
   type ModelFieldDeviation,
+  type TaskParameterSet,
+  type UpdateClassModelRequest,
 } from "@soarscore/shared";
+
+type UpdateClassModelTask = UpdateClassModelRequest["tasks"][number];
 import type { EventStore } from "../eventstore/event-store.js";
 import type { ClassModelProjection } from "./projection.js";
 import type { ClassModelReferenceChecker } from "./class-model-reference-checker.js";
@@ -97,15 +102,10 @@ export class ClassModelService {
       sourceModelId: source.id,
       basis: source.basis,
       speedInverted: source.speedInverted,
-      pointsPerSecond: source.pointsPerSecond,
       dropWorst: { ...source.dropWorst },
-      landingTable: source.landingTable
-        ? {
-            id: source.landingTable.id,
-            name: source.landingTable.name,
-            entries: source.landingTable.entries.map((e) => ({ ...e })),
-          }
-        : null,
+      // Deep-copy every task (precision, coefficients, penalties, owned table)
+      // so the clone shares no nested object with its source (AC5).
+      tasks: source.tasks.map(copyTaskParameterSet),
     };
 
     const record = this.eventStore.append({
@@ -139,16 +139,10 @@ export class ClassModelService {
       sourceModelId: existing.sourceModelId,
       basis: parsed.basis,
       speedInverted: parsed.speedInverted,
-      pointsPerSecond: parsed.pointsPerSecond,
       dropWorst: { ...parsed.dropWorst },
-      landingTable: parsed.landingTable
-        ? {
-            // Preserve the table id where the edit kept one; mint otherwise.
-            id: parsed.landingTable.id ?? crypto.randomUUID(),
-            name: parsed.landingTable.name,
-            entries: parsed.landingTable.entries.map((e) => ({ ...e })),
-          }
-        : null,
+      // Preserve each task id where the edit kept one; mint otherwise — mirroring
+      // the landing-table id handling so kept tasks diff positionally (AC2/AC5).
+      tasks: parsed.tasks.map((task) => this.materialiseTask(task)),
     };
 
     const record = this.eventStore.append({
@@ -185,6 +179,35 @@ export class ClassModelService {
       attribution,
     });
     this.projection.apply(record);
+  }
+
+  // Build a stored task from its parsed edit shape: preserve the task id and
+  // landing-table id where the edit kept them, mint otherwise. A table on a
+  // time-only task is dropped, not persisted (AC4: landingScored=false neither
+  // requires nor accepts a table); nlhCoefficients only ride an NLH-applicable
+  // task.
+  private materialiseTask(task: UpdateClassModelTask): TaskParameterSet {
+    const landingTable =
+      task.landingScored && task.landingTable
+        ? {
+            id: task.landingTable.id ?? crypto.randomUUID(),
+            name: task.landingTable.name,
+            entries: task.landingTable.entries.map((e) => ({ ...e })),
+          }
+        : null;
+    return {
+      id: task.id ?? crypto.randomUUID(),
+      name: task.name,
+      timingPrecision: { ...task.timingPrecision },
+      pointsPerSecond: task.pointsPerSecond,
+      speedInverted: task.speedInverted,
+      landingScored: task.landingScored,
+      landingTable,
+      perRoundOverrideAllowed: task.perRoundOverrideAllowed,
+      nlhApplicable: task.nlhApplicable,
+      nlhCoefficients: task.nlhApplicable ? task.nlhCoefficients : null,
+      penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
+    };
   }
 
   // AC10: names unique after trimming, case-insensitively, across ALL models

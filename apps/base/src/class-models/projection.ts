@@ -1,12 +1,12 @@
-import type { ContestClassModel } from "@soarscore/shared";
+import { copyTaskParameterSet, type ContestClassModel } from "@soarscore/shared";
 import type { EventRecord } from "../eventstore/event-store.js";
 
 const SCOPE = "master-data";
 
 // Derived state only (D4/D7) — safe to discard and rebuild from the log at any
-// time. Nested rule structures (dropWorst, landingTable entries) are deep-copied
-// on apply so no two projected models — especially a clone and its stock source
-// — alias the same object (AC5).
+// time. Nested rule structures (dropWorst, each task's precision / coefficients /
+// penalties / owned table) are deep-copied on apply so no two projected models —
+// especially a clone and its stock source — alias the same object (AC5).
 export class ClassModelProjection {
   private models = new Map<string, ContestClassModel>();
 
@@ -67,12 +67,7 @@ export class ClassModelProjection {
     return {
       ...model,
       dropWorst: { ...model.dropWorst },
-      landingTable: model.landingTable
-        ? {
-            ...model.landingTable,
-            entries: model.landingTable.entries.map((e) => ({ ...e })),
-          }
-        : null,
+      tasks: model.tasks.map(copyTaskParameterSet),
     };
   }
 }

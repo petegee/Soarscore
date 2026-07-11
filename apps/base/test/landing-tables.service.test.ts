@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EventStore } from "../src/eventstore/event-store.js";
 import { LandingTableProjection } from "../src/landing-tables/projection.js";
-import { NoTaskConfigYetChecker } from "../src/landing-tables/table-reference-checker.js";
+import type { LandingTableReferenceChecker } from "../src/landing-tables/table-reference-checker.js";
 import { LandingTableService } from "../src/landing-tables/service.js";
 import {
   LandingTableNotFoundError,
@@ -11,7 +11,11 @@ import {
 
 const attribution = { actorName: "tester", originClient: "test-client", authority: "organiser" };
 
-function buildService(referenceChecker = new NoTaskConfigYetChecker()) {
+// The NoTaskConfigYetChecker seam was retired (STORY-001-008); tables are
+// model-owned and this standalone module has no per-competition references.
+const NO_REFERENCES: LandingTableReferenceChecker = { getReferencingCompetitions: () => [] };
+
+function buildService(referenceChecker: LandingTableReferenceChecker = NO_REFERENCES) {
   const eventStore = new EventStore(":memory:");
   const projection = new LandingTableProjection();
   const service = new LandingTableService(eventStore, projection, referenceChecker);

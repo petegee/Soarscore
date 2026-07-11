@@ -52,11 +52,20 @@ import {
   RosterRemoveRequiresReplacementError,
   RosterReplaceNeedsConfirmationError,
 } from "./roster/errors.js";
+import { CompetitionTaskConfigProjection } from "./task-config/projection.js";
+import { CompetitionTaskConfigService } from "./task-config/service.js";
+import {
+  CompetitionTaskConfigNotFoundError,
+  NlhNotApplicableError,
+  PerRoundOverrideNotAllowedError,
+  TaskNotFoundError,
+} from "./task-config/errors.js";
 import { registerPilotRoutes } from "./routes/pilots.js";
 import { registerRosterRoutes } from "./routes/roster.js";
 import { registerClassModelRoutes } from "./routes/class-models.js";
 import { registerCompetitionRoutes } from "./routes/competitions.js";
 import { registerTemplateRoutes } from "./routes/templates.js";
+import { registerTaskConfigRoutes } from "./routes/task-config.js";
 import { registerHealthRoute } from "./routes/health.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -105,6 +114,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
   rosterProjection.rebuild(eventStore.readAll());
   const templateProjection = new TemplateProjection();
   templateProjection.rebuild(eventStore.readAll());
+  // Task-config overlay projection: rebuilt from the log on init (audit/replay
+  // parity) and filed under scope = competitionId (STORY-001-008).
+  const taskConfigProjection = new CompetitionTaskConfigProjection();
+  taskConfigProjection.rebuild(eventStore.readAll());
 
   const pilotService = new PilotService(
     eventStore,
@@ -151,12 +164,22 @@ export function buildApp(options: AppOptions): FastifyInstance {
     options.entryScoresProvider ?? new NoEntryScoresYetProvider(),
   );
 
+  // Task-config reads defaults from the class model and overlays per-event
+  // target-time overrides + the F5K NLH value (STORY-001-008).
+  const taskConfigService = new CompetitionTaskConfigService(
+    eventStore,
+    taskConfigProjection,
+    competitionProjection,
+    classModelProjection,
+  );
+
   registerHealthRoute(app);
   registerPilotRoutes(app, pilotService);
   registerClassModelRoutes(app, classModelService);
   registerCompetitionRoutes(app, competitionService);
   registerTemplateRoutes(app, templateService);
   registerRosterRoutes(app, rosterService);
+  registerTaskConfigRoutes(app, taskConfigService);
 
   if (options.serveStatic) {
     app.register(fastifyStatic, {
@@ -270,6 +293,17 @@ export function buildApp(options: AppOptions): FastifyInstance {
         message: error.message,
         details: { reason: error.reason },
       } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof CompetitionTaskConfigNotFoundError || error instanceof TaskNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (
+      error instanceof PerRoundOverrideNotAllowedError ||
+      error instanceof NlhNotApplicableError
+    ) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }
     if (error instanceof DomainError) {

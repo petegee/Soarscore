@@ -1,9 +1,10 @@
 import type { Pilot } from "./pilot.js";
 import type { LandingBonusEntry, LandingBonusTable } from "./landing-table.js";
 import type { Competition } from "./competition.js";
-import type { ContestClassModel } from "./class-model.js";
+import type { ContestClassModel, TaskParameterSet } from "./class-model.js";
 import type { ContestTemplate } from "./contest-template.js";
 import type { RosterEntry } from "./roster.js";
+import type { CompetitionTaskConfig } from "./task-config.js";
 
 export type PilotEventType = "pilot.created" | "pilot.updated" | "pilot.deleted";
 
@@ -90,8 +91,35 @@ export type ClassModelEventPayload =
   | ClassModelUpdatedPayload
   | ClassModelDeletedPayload;
 
-// Deep-copies the mutable nested rule structures (dropWorst, landingTable
-// entries) so no appended payload aliases the caller's model.
+// Deep-copies one task's mutable nested structures (timingPrecision,
+// nlhCoefficients, penaltyTypes, owned landingTable) so no appended payload
+// aliases the caller's model. Exported for reuse by the class-model clone/edit
+// deep-copy paths (STORY-001-008).
+export function copyTaskParameterSet(task: TaskParameterSet): TaskParameterSet {
+  return {
+    id: task.id,
+    name: task.name,
+    timingPrecision: { ...task.timingPrecision },
+    pointsPerSecond: task.pointsPerSecond,
+    speedInverted: task.speedInverted,
+    landingScored: task.landingScored,
+    landingTable: task.landingTable
+      ? {
+          id: task.landingTable.id,
+          name: task.landingTable.name,
+          entries: task.landingTable.entries.map((e) => ({ ...e })),
+        }
+      : null,
+    perRoundOverrideAllowed: task.perRoundOverrideAllowed,
+    nlhApplicable: task.nlhApplicable,
+    nlhCoefficients: task.nlhCoefficients ? { ...task.nlhCoefficients } : null,
+    penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
+  };
+}
+
+// Deep-copies the mutable nested rule structures (dropWorst, tasks[] and each
+// task's owned table/precision/coefficients/penalties) so no appended payload
+// aliases the caller's model.
 export function classModelToCreatedPayload(model: ContestClassModel): ClassModelCreatedPayload {
   return {
     id: model.id,
@@ -101,15 +129,8 @@ export function classModelToCreatedPayload(model: ContestClassModel): ClassModel
     sourceModelId: model.sourceModelId,
     basis: model.basis,
     speedInverted: model.speedInverted,
-    pointsPerSecond: model.pointsPerSecond,
     dropWorst: { ...model.dropWorst },
-    landingTable: model.landingTable
-      ? {
-          id: model.landingTable.id,
-          name: model.landingTable.name,
-          entries: model.landingTable.entries.map((e) => ({ ...e })),
-        }
-      : null,
+    tasks: model.tasks.map(copyTaskParameterSet),
   };
 }
 
@@ -258,5 +279,31 @@ export function competitionToCreatedPayload(
     pilotNumbersEnabled: competition.pilotNumbersEnabled,
     pilotClassesEnabled: competition.pilotClassesEnabled,
     pilotClasses: competition.pilotClasses,
+  };
+}
+
+// Per-competition task-config events (STORY-001-008). Like roster, these are
+// per-competition content events filed under scope = competitionId. The overlay
+// is written whole on every save (there is no partial patch event), so a single
+// taskConfig.updated type carries the full denormalised shape for audit.
+export type TaskConfigEventType = "taskConfig.updated";
+
+export type TaskConfigUpdatedPayload = CompetitionTaskConfig;
+
+export type TaskConfigEventPayload = TaskConfigUpdatedPayload;
+
+// Deep-copies the overlay (tasks[] with their roundOverrides maps) so no
+// appended payload aliases the caller's config.
+export function taskConfigToPayload(config: CompetitionTaskConfig): TaskConfigUpdatedPayload {
+  return {
+    id: config.id,
+    competitionId: config.competitionId,
+    classModelId: config.classModelId,
+    nlhValue: config.nlhValue,
+    tasks: config.tasks.map((task) => ({
+      taskId: task.taskId,
+      baseTargetSeconds: task.baseTargetSeconds,
+      roundOverrides: { ...task.roundOverrides },
+    })),
   };
 }

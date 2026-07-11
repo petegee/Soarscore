@@ -158,12 +158,14 @@ export function ClassModelLibrary({ actor }: { actor: Actor }) {
                     {model.origin === "stock" && <span className="badge"> FAI stock</span>}
                   </td>
                   <td>{model.basis}</td>
-                  <td>{model.pointsPerSecond ?? "—"}</td>
+                  <td>{model.tasks[0]?.pointsPerSecond ?? "—"}</td>
                   <td>
                     beyond {model.dropWorst.threshold} {model.dropWorst.unit}
                     {model.dropWorst.threshold === 1 ? "" : "s"}
                   </td>
-                  <td>{model.landingTable ? model.landingTable.name : "—"}</td>
+                  <td>
+                    {model.tasks.find((task) => task.landingTable)?.landingTable?.name ?? "—"}
+                  </td>
                   <td>
                     <div className="row-actions">
                       <button

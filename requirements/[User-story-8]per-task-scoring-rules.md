@@ -3,11 +3,16 @@
 > Source: `docs/user-stories/01-organiser.md` §3.7 · `docs/requirements/high-level-requirements.md` Area 3.7 · `docs/requirements/rules/00-general-rules.md` §2
 > Module: 001 (Organiser MVP) · Estimated effort: **4 days**
 
-> **Reshaped by D12 / STORY-001-016.** Per-task parameters are **additive
-> slots on the Contest Class Model**. AC3's landing table is the **model's
-> owned table** (STORY-001-002's standalone selection is superseded); AC2/AC5
-> defaults come from the model, and a deviation is a custom clone (016), not a
-> per-field warning. The per-event constant (F5K NLH, AC6) is unchanged.
+> **Reshaped by D12 / STORY-001-016.** Per-task **rule-fixed** parameters are
+> **additive slots on the Contest Class Model** (timing precision,
+> points-per-second, landing-scored flag + owned table, penalty-type catalogue,
+> NLH coefficients); AC2/AC5 defaults come from the model, and a deviation from
+> any of them is a **custom clone** (016), not a per-field warning. AC3's
+> landing table is the model's **owned table** (STORY-001-002's standalone
+> selection is superseded). The **per-event** parameters a shared model cannot
+> carry — a round's target-time override (AC1) and the CD-announced F5K NLH
+> **value** (AC6) — live on a **new per-competition task-config overlay** filed
+> under `scope = competitionId`.
 
 ### Background
 
@@ -48,8 +53,9 @@ parameter model must already hold every class's numbers correctly.
 ### Scope In
 
 - Per task: target time with per-round overrides where the task allows them.
-- Per task: timing precision, points-per-second, landing-bonus table
-  selection (where landings are used), penalty/deduction types.
+- Per task: timing precision, points-per-second, the landing-scored flag and
+  the class model's owned landing table (per-event selection superseded by
+  016), penalty/deduction types.
 - Named per-event rule constants where a class leaves them to the event
   (first case: F5K Nominal Launch Height).
 
@@ -58,29 +64,31 @@ parameter model must already hold every class's numbers correctly.
 - Discipline-specific task screens and special rules — deferred
   per-discipline requirements.
 - The device-side capture experience (scorer-device scope).
-- Rule-fixed value defaults/warnings — pattern owned by STORY-001-007,
-  applied here.
+- Rule-fixed value defaults and deviation handling — the clone-and-edit
+  mechanism owned by STORY-001-016, applied here (no per-field warnings).
 
 ### Acceptance Criteria
 
 #### AC1: Target time with per-round overrides
-**Given** an F3J competition whose qualifying working time is 10 minutes
-**When** the Organiser sets round 5's target/working time to 8 minutes where
-the task allows per-round overrides
-**Then** rounds 1–4 keep 10 minutes and round 5 carries 8 minutes.
+**Given** a competition whose task permits per-round working-time overrides
+(F3K in MVP — the only class whose rule grants the organiser working-time
+reduction; F3J/F5J/F5L/F5K/F3B working times are rule-fixed)
+**When** the Organiser reduces round 5's working time below the base
+**Then** other rounds keep the base and round 5 carries the override.
 
 #### AC2: Timing precision matches the class rule
 **Given** tasks configured for F3J, F5J and F3B Speed
 **When** the Organiser reviews each task's timing precision
 **Then** they default to 0.1 s, whole seconds and 1/100 s respectively, and a
-deviating precision triggers the explicit-confirmation warning
-(STORY-001-007 guardrail).
+deviating precision is a custom clone of the class model (D12/016), surfaced
+as a model deviation — not a per-field warning.
 
 #### AC3: Landing table where landings are scored
 **Given** an F5J task (landings scored)
 **When** the Organiser configures it
-**Then** a landing-bonus table can be selected from master data, the class's
-mandated table is the default, and a different selection warns.
+**Then** the class model's owned landing table applies as the default; scoring
+a different table is a custom clone of the model (D12/016), not a per-event
+selection from master data.
 
 #### AC4: No landing table for time-only tasks
 **Given** an F3K task (flight time only)
@@ -97,12 +105,12 @@ values drive capture and scoring for that task.
 #### AC6: Per-event rule constant — F5K Nominal Launch Height
 **Given** an F5K competition
 **When** the Organiser configures the competition
-**Then** the Nominal Launch Height has a named place in the task
-configuration accepting the CD-announced value (60 m light wind / 70 m
+**Then** the Nominal Launch Height has a named place in the **per-competition
+task-config overlay** accepting the CD-announced value (60 m light wind / 70 m
 moderate wind), it feeds F5K's scoring computation, and the rule-fixed
 adjustments around it (+0.5 per metre below, −1.0 per metre 1–10 m above,
-−3.0 per metre 11 m and above) default per the class rule with deviations
-warned.
+−3.0 per metre 11 m and above) default per the class rule; a deviation from
+them is a custom clone of the model (D12/016), not a warning.
 
 ### INVEST Check
 

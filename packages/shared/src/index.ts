@@ -5,6 +5,7 @@ export * from "./class-model.js";
 export * from "./scoring.js";
 export * from "./contest-template.js";
 export * from "./roster.js";
+export * from "./task-config.js";
 export * from "./events.js";
 export * from "./attribution.js";
 export * from "./errors.js";

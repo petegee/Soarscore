@@ -47,33 +47,66 @@ describe("ClassModelService — seed (AC1–AC4)", () => {
     expect(fresh.getAll()).toEqual(projection.getAll());
   });
 
-  it("AC2: the F5L stock model owns its 100→0 landing table", () => {
+  it("AC2: the F5L stock model's task owns its 100→0 landing table", () => {
     const { service } = buildService();
     const f5l = service.get(stockModelIdFor("F5L"));
-    expect(f5l.landingTable).not.toBeNull();
-    expect(f5l.landingTable?.entries[0]).toEqual({ distanceM: 0.2, points: 100 });
-    expect(f5l.landingTable?.entries.at(-1)?.points).toBe(0);
+    const task = f5l.tasks[0];
+    expect(task?.landingScored).toBe(true);
+    expect(task?.landingTable).not.toBeNull();
+    expect(task?.landingTable?.entries[0]).toEqual({ distanceM: 0.2, points: 100 });
+    expect(task?.landingTable?.entries.at(-1)?.points).toBe(0);
   });
 
-  it("AC3: F5L is 2 pt/s drop>5; F5J is 1 pt/s drop>4", () => {
+  it("AC3/AC5: F5L is 2 pt/s drop>5; F5J is 1 pt/s drop>4 (rate on the task)", () => {
     const { service } = buildService();
     const f5l = service.get(stockModelIdFor("F5L"));
     const f5j = service.get(stockModelIdFor("F5J"));
-    expect(f5l.pointsPerSecond).toBe(2);
+    expect(f5l.tasks[0]?.pointsPerSecond).toBe(2);
     expect(f5l.dropWorst).toEqual({ threshold: 5, unit: "round" });
-    expect(f5j.pointsPerSecond).toBe(1);
+    expect(f5j.tasks[0]?.pointsPerSecond).toBe(1);
     expect(f5j.dropWorst).toEqual({ threshold: 4, unit: "round" });
   });
 
-  it("AC4: F3B normalises separately with a per-task drop-worst unit", () => {
+  it("AC2: timing precision defaults per class (F3J 0.1 s nearest; F3K 0.1 s truncated)", () => {
+    const { service } = buildService();
+    const f3j = service.get(stockModelIdFor("F3J"));
+    const f3k = service.get(stockModelIdFor("F3K"));
+    expect(f3j.tasks[0]?.timingPrecision).toEqual({ stepSeconds: 0.1, rounding: "nearest" });
+    expect(f3k.tasks[0]?.timingPrecision).toEqual({ stepSeconds: 0.1, rounding: "truncate" });
+  });
+
+  it("AC1: F3K alone allows per-round working-time overrides", () => {
+    const { service } = buildService();
+    const allowFlags = ["F3J", "F3K", "F5J", "F5K", "F5L", "F3B"].map((d) =>
+      service.get(stockModelIdFor(d as never)).tasks.some((t) => t.perRoundOverrideAllowed),
+    );
+    // Only F3K (index 1) permits overrides.
+    expect(allowFlags).toEqual([false, true, false, false, false, false]);
+  });
+
+  it("AC6: F5K seeds NLH-applicable tasks with the rule-fixed coefficients", () => {
+    const { service } = buildService();
+    const f5k = service.get(stockModelIdFor("F5K"));
+    expect(f5k.tasks).toHaveLength(5);
+    expect(f5k.tasks.every((t) => t.nlhApplicable)).toBe(true);
+    expect(f5k.tasks[0]?.nlhCoefficients).toEqual({
+      belowPerMetre: 0.5,
+      above1to10PerMetre: -1.0,
+      above11PlusPerMetre: -3.0,
+    });
+  });
+
+  it("AC4: F3B normalises separately with a per-task drop-worst unit and three tasks", () => {
     const { service } = buildService();
     const f3b = service.get(stockModelIdFor("F3B"));
     expect(f3b.basis).toBe("separate-per-task");
     expect(f3b.dropWorst).toEqual({ threshold: 5, unit: "task" });
     expect(f3b.speedInverted).toBe(true);
-    // Classes fixing no single rate/table carry nulls, never placeholders.
-    expect(f3b.pointsPerSecond).toBeNull();
-    expect(f3b.landingTable).toBeNull();
+    expect(f3b.tasks.map((t) => t.name)).toEqual(["Duration", "Distance", "Speed"]);
+    // The speed task is 1/100 s and inverted; none score a landing (null tables).
+    expect(f3b.tasks[2]?.timingPrecision).toEqual({ stepSeconds: 0.01, rounding: "nearest" });
+    expect(f3b.tasks[2]?.speedInverted).toBe(true);
+    expect(f3b.tasks.every((t) => t.landingTable === null)).toBe(true);
   });
 });
 
@@ -87,12 +120,12 @@ describe("ClassModelService — clone / edit (AC5–AC7)", () => {
     expect(clone.origin).toBe("custom");
     expect(clone.sourceModelId).toBe(stockModelIdFor("F5L"));
     expect(clone.id).not.toBe(stockModelIdFor("F5L"));
-    expect(clone.pointsPerSecond).toBe(2);
+    expect(clone.tasks[0]?.pointsPerSecond).toBe(2);
 
     // The stock model is byte-identical afterwards.
     expect(service.get(stockModelIdFor("F5L"))).toEqual(before);
-    // And the clone owns an independent landing-table array.
-    expect(clone.landingTable?.entries).not.toBe(before.landingTable?.entries);
+    // And the clone owns an independent task landing-table array.
+    expect(clone.tasks[0]?.landingTable?.entries).not.toBe(before.tasks[0]?.landingTable?.entries);
   });
 
   it("AC6: editing a custom model records the correct stock-vs-chosen deviation", () => {
@@ -105,9 +138,8 @@ describe("ClassModelService — clone / edit (AC5–AC7)", () => {
         name: "F5L – local rule",
         basis: clone.basis,
         speedInverted: clone.speedInverted,
-        pointsPerSecond: clone.pointsPerSecond,
         dropWorst: { threshold: 3, unit: "round" },
-        landingTable: clone.landingTable,
+        tasks: clone.tasks,
       },
       attribution,
     );
@@ -120,6 +152,40 @@ describe("ClassModelService — clone / edit (AC5–AC7)", () => {
     ]);
   });
 
+  it("AC2/AC5: editing a task's precision and rate surfaces per-task deviations", () => {
+    const { service } = buildService();
+    const clone = service.clone(stockModelIdFor("F5L"), { name: "F5L – tenths" }, attribution);
+    const task = clone.tasks[0]!;
+
+    service.update(
+      clone.id,
+      {
+        name: "F5L – tenths",
+        basis: clone.basis,
+        speedInverted: clone.speedInverted,
+        dropWorst: clone.dropWorst,
+        tasks: [
+          {
+            ...task,
+            timingPrecision: { stepSeconds: 0.1, rounding: "nearest" },
+            pointsPerSecond: 3,
+          },
+        ],
+      },
+      attribution,
+    );
+
+    const { deviations } = service.getWithDeviations(clone.id);
+    expect(deviations).toEqual([
+      {
+        field: "tasks[0].timingPrecision",
+        stockValue: { stepSeconds: 1, rounding: "truncate" },
+        chosenValue: { stepSeconds: 0.1, rounding: "nearest" },
+      },
+      { field: "tasks[0].pointsPerSecond", stockValue: 2, chosenValue: 3 },
+    ]);
+  });
+
   it("AC7: editing a stock model is refused with a clone-first error", () => {
     const { service } = buildService();
     expect(() =>
@@ -129,9 +195,8 @@ describe("ClassModelService — clone / edit (AC5–AC7)", () => {
           name: "F3J",
           basis: "single-group",
           speedInverted: false,
-          pointsPerSecond: 2,
           dropWorst: { threshold: 3, unit: "round" },
-          landingTable: null,
+          tasks: [],
         },
         attribution,
       ),

@@ -3,18 +3,20 @@ import type {
   ClassModelBasis,
   ContestClassModel,
   DropWorstUnit,
-  LandingBonusEntry,
+  TaskParameterSet,
 } from "@soarscore/shared";
 
 // Edits the rule-fixed surface of a CUSTOM model only (AC7). Stock models never
 // reach this form — the library disables Edit for them and shows a clone hint.
+// STORY-001-008: scoring parameters moved onto tasks[]. Full per-task editing is
+// a deferred (per-discipline) task screen; this form exposes only the primary
+// task's points-per-second and rides the rest of tasks[] through unchanged.
 export interface ClassModelSubmitValues {
   name: string;
   basis: ClassModelBasis;
   speedInverted: boolean;
-  pointsPerSecond: number | null;
   dropWorst: { threshold: number; unit: DropWorstUnit };
-  landingTable: { id?: string; name: string; entries: LandingBonusEntry[] } | null;
+  tasks: TaskParameterSet[];
 }
 
 export interface ClassModelFormProps {
@@ -28,30 +30,37 @@ export function ClassModelForm({ model, fieldErrors, onSubmit, onCancel }: Class
   const [name, setName] = useState(model.name);
   const [basis, setBasis] = useState<ClassModelBasis>(model.basis);
   const [speedInverted, setSpeedInverted] = useState(model.speedInverted);
-  // Kept as strings so an empty field maps cleanly to null (class fixes no rate).
+  // The primary task's rate. Kept as a string so an empty field maps cleanly to
+  // null (task fixes no rate). Other task parameters ride through unchanged.
+  const primaryRate = model.tasks[0]?.pointsPerSecond ?? null;
   const [pointsPerSecond, setPointsPerSecond] = useState(
-    model.pointsPerSecond === null ? "" : String(model.pointsPerSecond),
+    primaryRate === null ? "" : String(primaryRate),
   );
   const [threshold, setThreshold] = useState(String(model.dropWorst.threshold));
   const [unit, setUnit] = useState<DropWorstUnit>(model.dropWorst.unit);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const rate = pointsPerSecond.trim() === "" ? null : Number(pointsPerSecond);
+    // Deep-copy tasks[] and apply the one edited value onto the primary task;
+    // every other task parameter (precision, table, penalties, NLH) rides
+    // through unchanged — its editor is a deferred per-discipline task screen.
+    const tasks: TaskParameterSet[] = model.tasks.map((task, index) => ({
+      ...task,
+      timingPrecision: { ...task.timingPrecision },
+      landingTable: task.landingTable
+        ? { ...task.landingTable, entries: task.landingTable.entries.map((e) => ({ ...e })) }
+        : null,
+      nlhCoefficients: task.nlhCoefficients ? { ...task.nlhCoefficients } : null,
+      penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
+      pointsPerSecond: index === 0 ? rate : task.pointsPerSecond,
+    }));
     onSubmit({
       name,
       basis,
       speedInverted,
-      pointsPerSecond: pointsPerSecond.trim() === "" ? null : Number(pointsPerSecond),
       dropWorst: { threshold: Number(threshold), unit },
-      // The landing table rides through unchanged — its editor is deferred to a
-      // later story; the owned table is preserved as-is on save.
-      landingTable: model.landingTable
-        ? {
-            id: model.landingTable.id,
-            name: model.landingTable.name,
-            entries: model.landingTable.entries.map((e) => ({ ...e })),
-          }
-        : null,
+      tasks,
     });
   }
 

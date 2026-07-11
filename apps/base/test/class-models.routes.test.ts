@@ -37,9 +37,9 @@ describe("class-model routes", () => {
       url: `/api/class-models/${stockModelIdFor("F5L")}`,
     });
     const { model } = response.json();
-    expect(model.pointsPerSecond).toBe(2);
+    expect(model.tasks[0].pointsPerSecond).toBe(2);
     expect(model.dropWorst).toEqual({ threshold: 5, unit: "round" });
-    expect(model.landingTable.entries[0]).toEqual({ distanceM: 0.2, points: 100 });
+    expect(model.tasks[0].landingTable.entries[0]).toEqual({ distanceM: 0.2, points: 100 });
   });
 
   it("AC4: F3B is separate-per-task with a per-task drop-worst unit", async () => {
@@ -77,9 +77,8 @@ describe("class-model routes", () => {
         name: "F3J",
         basis: "single-group",
         speedInverted: false,
-        pointsPerSecond: 5,
         dropWorst: { threshold: 3, unit: "round" },
-        landingTable: null,
+        tasks: [],
       },
     });
     expect(response.statusCode).toBe(409);
