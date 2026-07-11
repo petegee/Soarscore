@@ -1,0 +1,18 @@
+# Render Blueprint for the tactical demo. Import via Render dashboard
+# ("New +" -> "Blueprint") pointed at this repo, or create the web service by
+# hand. autoDeploy is off so deploys are gated behind green CI: the GitHub
+# Actions workflow pings this service's Deploy Hook only after tests pass.
+services:
+  - type: web
+    name: soarscore-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    # Match this to the branch the CI deploy job triggers on (see ci.yml).
+    branch: master
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+    # No disk block on purpose: the filesystem is ephemeral, so the SQLite
+    # event log resets on each deploy/restart. That is intended for the demo.

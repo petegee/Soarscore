@@ -235,7 +235,7 @@ interest), so they remain an indirect user by design.
 
 | Task | Area |
 |---|---|
-| Provide/confirm entry details (e.g. class, start number) via the roster | [3.4](high-level-requirements.md#area-3--competition-setup--configuration) |
+| Provide/confirm entry details (e.g. class, pilot number) via the roster | [3.4](high-level-requirements.md#area-3--competition-setup--configuration) |
 | Cross-check the Scorer's device is set to their name before the group begins | [5.0](high-level-requirements.md#area-5--scoring) |
 | Hear the round / group / pilot announcements and read the field board to know when they fly | [6.2](high-level-requirements.md#area-6--display-timer--audio-field-aids), [6.3](high-level-requirements.md#area-6--display-timer--audio-field-aids) |
 | Fly; result entered on their behalf by the Scorer | [5.2](high-level-requirements.md#area-5--scoring) |

@@ -147,7 +147,7 @@ and helpers can get to the line in time.
 - [ ] Given a group is about to run, when its sequence begins, then the speakers
   announce the **round and group** by name (e.g. "Round 1, Group A").
 - [ ] Given the group is announced, when the pilots are read, then each competitor
-  in the group is announced in **flying order** with **name and start number**, so
+  in the group is announced in **flying order** with **name and pilot number**, so
   a pilot hears whether they are in this group.
 - [ ] Given the pilots have been announced, when preparation begins, then the start
   of the **preparation time** is announced.
@@ -356,7 +356,7 @@ remains as an implementation risk to watch.
    nothing consumes it.)*
 
 2. **Callouts — RESOLVED.** The mandatory set is: round/group + pilot names (flying
-   order, name + start number), start of preparation, remaining time **each minute
+   order, name + pilot number), start of preparation, remaining time **each minute
    on the minute** during working time, **every second from −30 s to zero**, a
    **loud horn** at end of working time, and the **landing-window start** and
    **all-down** calls. Additional in-working-time reminders are **configurable**
@@ -393,4 +393,4 @@ remains as an implementation risk to watch.
    English only**, for the MVP. Pronunciation of international names is an **accepted
    MVP limitation** rather than a blocker; a non-English or recorded-audio approach
    is a possible future enhancement. The requirement fixes both **what** is
-   announced (flying order, name + start number) and **how** (English TTS).
+   announced (flying order, name + pilot number) and **how** (English TTS).

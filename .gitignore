@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+*.log
+.DS_Store
+coverage/
+
+apps/companion/.vite/deps_temp_78ea0db7/

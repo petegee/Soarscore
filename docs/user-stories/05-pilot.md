@@ -58,7 +58,7 @@ read-only.
 ### 3.4 — Confirm my entry details are correct
 
 **As a** Pilot / Competitor, **I want** to be able to confirm that my entry
-details on the roster — my name, class and start number — are right, **so that** I
+details on the roster — my name, class and pilot number — are right, **so that** I
 fly and am scored under the correct identity and there are no attribution
 surprises later.
 
@@ -66,20 +66,20 @@ surprises later.
 - [ ] Given the competition roster
   ([Organiser 3.4](01-organiser.md#34--build-and-edit-the-roster)), when it is
   published or made viewable, then it shows **my name and the entry attributes
-  that apply to me** — my **start number** and **class** where those options are
+  that apply to me** — my **pilot number** and **class** where those options are
   enabled ([3.3](../requirements/high-level-requirements.md#area-3--competition-setup--configuration)) —
   so I can check they match what I provided.
 - [ ] Given I spot a detail that is wrong, when I raise it, then the **Organiser**
   can correct it on the roster on my behalf — I do **not** edit the roster myself;
   my role is to **provide/confirm**, theirs is to maintain.
 - [ ] Given the roster changes before the draw (e.g. a late entry or a corrected
-  start number), when it is re-published, then the corrected details are what the
+  pilot number), when it is re-published, then the corrected details are what the
   draw and later reports use, so my identity stays consistent downstream.
 
 **Traces to:** area(s) 3.4 · users.md §5 Pilot / Competitor
 **Notes:** The **Organiser** owns roster maintenance
 ([3.4](01-organiser.md#34--build-and-edit-the-roster)); the pilot only supplies
-and confirms their own details. Start numbers and pilot classes are optional entry
+and confirms their own details. Pilot numbers and pilot classes are optional entry
 features ([3.3](../requirements/high-level-requirements.md#area-3--competition-setup--configuration))
 — where disabled, the pilot simply has no such attribute to confirm.
 
@@ -97,7 +97,7 @@ stale pilot carried over from the previous group.
 **Acceptance criteria**
 - [ ] Given the moment before a group starts, when I look at the device of the
   Scorer assigned to me, then the device **plainly shows the selected competitor**
-  (name, and start number where enabled) so I can confirm it is **me** — this is
+  (name, and pilot number where enabled) so I can confirm it is **me** — this is
   the pilot-facing side of the Scorer's pre-group confirmation
   ([Scorer 5.0.2](03-scorer.md#502--confirm-the-selected-pilot-before-the-group-starts)).
 - [ ] Given the device shows the **wrong** pilot, when I notice before the group
@@ -167,7 +167,7 @@ having to ask an official.
 - [ ] Given a group is about to run, when its sequence is announced over the
   speakers ([6.2](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids)),
   then I hear the **round and group** and then the group's **pilots in flying order
-  with name and start number**, so I can tell **whether I am in this group** and
+  with name and pilot number**, so I can tell **whether I am in this group** and
   where I am in its order.
 - [ ] Given my group is flying, when I read the **field board**
   ([6.3](../requirements/high-level-requirements.md#area-6--display-timer--audio-field-aids)),

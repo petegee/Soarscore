@@ -42,6 +42,22 @@ groups access.
   The dangling "timekeeper count" parameter is removed from 3.7; if
   per-discipline work ever needs FAI officiating fidelity, it reopens this
   deliberately. As with the signed-card waiver, the rule docs are unchanged.
+- *(Added 2026-07-11.)* **A flying group is capped at half the roster.**
+  Because the Scorer is a non-flying pilot (the waiver above) and there is
+  **one Scorer per flying competitor**
+  ([general domain model](../../CLAUDE.md); [Area 5](high-level-requirements.md#area-5--scoring)),
+  a group of *G* flyers needs *G* scorers drawn from the *(roster − G)* pilots
+  not flying it — so **G ≤ roster ÷ 2**, i.e. **every qualifying round has at
+  least two groups**. (Fly-offs — a single group of the top qualifiers — are a
+  [Future Enhancement](high-level-requirements.md#future-enhancements) and are
+  not subject to this floor.) This is an **MVP operational constraint derived
+  from this waiver**,
+  not an FAI rule (the FAI assumes dedicated officials, so a single all-play
+  group is theoretically possible there); the rule docs are unchanged. It
+  bounds the draw's groups-per-round from below
+  ([4.1](high-level-requirements.md#area-4--draw--rounds-generation)). The
+  **exception** — when spare, dedicated non-flying people are present to score —
+  relaxes the cap and is expressed as an explicit draw-specification override.
 
 ## D2 — Scorer device: dedicated ESP32 stopwatch-style handheld
 
@@ -308,3 +324,50 @@ base-side work.
   ([6.4](high-level-requirements.md#area-6--display-timer--audio-field-aids))
   is unchanged, but it no longer bounds Scorer self-correction (that ends
   earlier, with the group) — it is purely scoring integrity.
+
+## D12 — Contest classes are modelled as seeded, cloneable definitions
+
+*(Decided 2026-07-10.)* A **contest class** is not a bare `discipline` enum
+with its numbers scattered across configuration — it is a first-class
+**Contest Class Model**: a definition holding the class's group-score basis,
+drop-worst rule, points-per-second, and its **own** landing table (later,
+additively, its tasks, metrics and penalties). The application **defers to the
+model** rather than switching on discipline; a competition **references** a
+model. Each of the six MVP classes ships as a **read-only stock model**; a
+club-level variation is a **named custom model cloned** from a stock one (e.g.
+"F5L – local rule"). This is the concrete realisation of
+[NFR-1](non-functional.md#nfr-1--one-centralised-flexible-task-model) (one
+central place that knows a class's shape) and
+[NFR-2](non-functional.md#nfr-2--additive-only-extensibility-for-new-competition-types)
+(a new class is a new seeded model, not a code change).
+
+**Derived, not authoritative (house rule 1).** The stock models are a
+**derived encoding** of the read-only rule docs
+([rules/](rules/)) — regenerated when those docs change, never authoritative
+over them, and never permitted to contravene them. `discipline` on a
+competition becomes a *reference to a model*, which is consistent with — and
+supersedes the wording of — the earlier "a key into the rule corpus, not a
+copy of any rule number" note in the competition configuration. Copying rule
+numbers into the product was always going to happen *somewhere* (NFR-1 demands
+it); D12 fixes that somewhere as the one class model, under the rule docs'
+authority.
+
+**Consequences**
+
+- A **deliberate rule deviation is a named custom model**, not a silent
+  per-field override. The clone records how it differs from its stock source,
+  giving reports an auditable "ran class X, a custom variant of F5L, drop-worst
+  beyond 3 rounds (FAI: 5)" — the [D4](#d4--immutable-event-log) log carries the
+  cloning as an attributed mutation.
+- The class model **owns its landing table outright**. This **supersedes the
+  standalone landing-table library** of the original STORY-001-002: tables are
+  managed *within* class definitions, not selected independently per
+  competition. Existing landing-table events remain in the immutable log (D4);
+  this is a repurpose, not a purge.
+- **STORY-001-016** delivers the model; **STORY-001-004** (discipline →
+  class-model selection), **STORY-001-007** (scoring options read from the
+  model; deviation = clone-and-edit) and **STORY-001-008** (tasks/penalties as
+  additive slots on the model) are reshaped to depend on it.
+- Stock models are **read-only and never deletable**; a model referenced by a
+  competition cannot be deleted. Extending the class set is **additive**
+  (NFR-2) — a new seeded model, no edit to existing behaviour, data or results.
