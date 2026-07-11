@@ -4,5 +4,6 @@ data/
 *.log
 .DS_Store
 coverage/
+.mcp.json
 
 apps/companion/.vite/deps_temp_78ea0db7/
