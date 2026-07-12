@@ -17,6 +17,7 @@ import {
   type LaneAllocationPolicy,
   type MatchupDistribution,
   type MeetCount,
+  modelAllowsAllCompetitorsFallback,
   type RoundDraw,
 } from "@soarscore/shared";
 import type { EventStore } from "../eventstore/event-store.js";
@@ -28,10 +29,35 @@ import {
   DrawCandidateNotFoundError,
   DrawCandidateSupersededError,
   DrawGenerationFailedError,
+  DrawGroupSizeWarningUnacknowledgedError,
   DrawSpecNotFoundError,
   GroupSizeOutOfBoundsError,
   ValidationError,
 } from "./errors.js";
+
+// The exact FAI rule clause to cite for a class's rule-fixed per-group
+// minimum (house rule 1: sourced from docs/requirements/rules/, never
+// altered to fit this story). F5K/F5L fix no per-group minimum, so they
+// never raise a group-size-minimum warning (AC6). Keyed on sourceClass, the
+// single place a class maps to its clause string — a seventh class only adds
+// one line here (NFR-2).
+function groupSizeMinimumClauseFor(model: ContestClassModel): string | null {
+  switch (model.sourceClass) {
+    case "F3B":
+      // Shared by Duration/Distance/Speed per the rule doc; distinct
+      // per-task naming is STORY-001-020's concern (deferred, AC2).
+      return "F3B.1.8 b";
+    case "F3J":
+      return "F3J.6.1";
+    case "F3K":
+      return "F3K.9.1";
+    case "F5J":
+      return "5.5.11.8";
+    case "F5K":
+    case "F5L":
+      return null;
+  }
+}
 
 // Fixed attempt budget (Decision #7). At MVP scale (≤ 20 pilots, ≤ 8 rounds) a
 // couple hundred randomised attempts run comfortably and give the fairness
@@ -61,7 +87,7 @@ export class DrawService {
     const accepted = this.projection.getAccepted(competitionId) ?? null;
     const status = accepted ? "accepted" : candidate ? "awaiting-decision" : "no-draw";
     const warnings = spec
-      ? this.computeWarnings(spec, this.rosterSize(competitionId), this.resolveMin(model, spec.minGroupSizeOverride))
+      ? this.computeWarnings(spec, this.rosterSize(competitionId), this.resolveMin(model))
       : [];
     return { spec, candidate, accepted, status, warnings };
   }
@@ -73,15 +99,32 @@ export class DrawService {
   saveSpec(competitionId: string, input: unknown, attribution: Attribution): DrawEvidenceView {
     const competition = this.getCompetition(competitionId);
     const model = this.getModel(competition);
-    const parsed = parseOrThrow(saveDrawSpecRequestSchema, input);
+    const allowsAllCompetitorsFallback = modelAllowsAllCompetitorsFallback(model);
+    // The Zod cross-field refine structurally requires allowSingleGroup=true
+    // whenever groupsPerRound=1 (Norm 2 — model-agnostic input shape). For a
+    // class carrying the "or all competitors" escape (e.g. F3B Speed), a
+    // single group is *always* rule-legal on its own account, so the CD
+    // shouldn't have to separately tick the (unrelated) spare-scorer override
+    // just to request it. Fill it in ahead of parsing rather than relaxing the
+    // schema itself, keeping the schema's structural rule intact.
+    const coercedInput =
+      allowsAllCompetitorsFallback &&
+      typeof input === "object" &&
+      input !== null &&
+      (input as Record<string, unknown>).groupsPerRound === 1
+        ? { ...(input as Record<string, unknown>), allowSingleGroup: true }
+        : input;
+    const parsed = parseOrThrow(saveDrawSpecRequestSchema, coercedInput);
 
-    const resolvedMin = this.resolveMin(model, parsed.minGroupSizeOverride);
+    const resolvedMin = this.resolveMin(model);
     const R = this.rosterSize(competitionId);
-    // AC1 hard bound — enforced at save whenever a roster exists (≥ 2 seats);
+    // D1 hard bound — enforced at save whenever a roster exists (≥ 2 seats);
     // an empty/near-empty roster defers to generate (Safeguard 6) so the policy
-    // can be authored before pilots are entered.
+    // can be authored before pilots are entered. The rule-fixed minimum no
+    // longer hard-rejects here (D14) — a shortfall against it surfaces only as
+    // a generate-time warning (STORY-001-022).
     if (R >= 2) {
-      this.assertGroupBound(R, parsed.groupsPerRound, resolvedMin, parsed.allowSingleGroup);
+      this.assertGroupBound(R, parsed.groupsPerRound, parsed.allowSingleGroup, allowsAllCompetitorsFallback);
     }
 
     const existing = this.projection.getSpec(competitionId);
@@ -135,11 +178,31 @@ export class DrawService {
     const roster = this.rosterProjection.getRoster(competitionId);
     const seatIds = roster.map((entry) => entry.id);
     const R = seatIds.length;
-    const resolvedMin = this.resolveMin(model, spec.minGroupSizeOverride);
+    const resolvedMin = this.resolveMin(model);
 
-    // Re-check the bound against the *current* roster: it may have shrunk since
-    // the spec was saved (Safeguard 6). Also rejects an empty roster (R < 2).
-    this.assertGroupBound(R, spec.groupsPerRound, resolvedMin, spec.allowSingleGroup);
+    // Re-check the D1 bound against the *current* roster: it may have shrunk
+    // since the spec was saved (Safeguard 6). Also rejects an empty roster
+    // (R < 2). The rule-fixed minimum is no longer a hard rejection here
+    // (D14) — see resolveGroupPlan below. singleGroupPermitted mirrors
+    // assertGroupBound's own gate exactly, and is reused below so the fallback
+    // search can never land on a single group the CD hasn't consented to
+    // (bug fix: previously the fallback could collapse to G=1 without
+    // re-checking this gate, silently defeating the D1 spare-scorer consent
+    // requirement — see resolveGroupPlan's comment).
+    const singleGroupPermitted = spec.allowSingleGroup || modelAllowsAllCompetitorsFallback(model);
+    this.assertGroupBound(R, spec.groupsPerRound, spec.allowSingleGroup, modelAllowsAllCompetitorsFallback(model));
+
+    // The "closest available grouping" fallback (STORY-001-022): generate with
+    // the requested groupsPerRound whenever it already clears the resolved
+    // rule-fixed minimum; otherwise search for the largest group count that
+    // does. See resolveGroupPlan for the single-group consent rule.
+    const { effectiveG, warning: groupSizeWarning } = this.resolveGroupPlan(
+      model,
+      R,
+      spec.groupsPerRound,
+      resolvedMin,
+      singleGroupPermitted,
+    );
 
     const contestNumbers = new Map<string, number | null>(
       roster.map((entry) => [entry.id, entry.pilotNumber]),
@@ -150,7 +213,7 @@ export class DrawService {
     let bestDistribution: MatchupDistribution | null = null;
     let bestKey: number[] | null = null;
     for (let i = 0; i < ATTEMPTS; i++) {
-      const placement = this.runAttempt(seatIds, spec);
+      const placement = this.runAttempt(seatIds, spec, effectiveG);
       if (!placement) continue;
       const distribution = this.computeDistribution(placement, seatIds);
       const key = scoreKey(distribution, spec.fairnessMetric);
@@ -164,6 +227,8 @@ export class DrawService {
     if (!bestPlacement || !bestDistribution) {
       // AC6: no attempt yielded a valid draw (e.g. the no-back-to-back rule is
       // unsatisfiable for this roster/spec). Nothing is appended (Safeguard 3).
+      // Orthogonal to the group-size fallback above, which only picks the G to
+      // attempt with — it never guarantees an attempt succeeds.
       throw new DrawGenerationFailedError(
         `Could not generate a valid draw after ${ATTEMPTS} attempts — the constraints may be unsatisfiable for this roster and specification`,
       );
@@ -178,6 +243,7 @@ export class DrawService {
       metricValue: metricValueOf(bestDistribution, spec.fairnessMetric),
       distribution: bestDistribution,
       attemptsRun: ATTEMPTS,
+      groupSizeWarnings: groupSizeWarning ? [groupSizeWarning] : [],
     };
 
     const record = this.eventStore.append({
@@ -198,7 +264,12 @@ export class DrawService {
   // decision (cancel → generate → accept is a valid cycle); re-draw *after*
   // acceptance is out of scope (Area 5.5). Attribution is the CD's (D1:
   // recorded, not enforced).
-  accept(competitionId: string, drawId: string, attribution: Attribution): DrawEvidenceView {
+  accept(
+    competitionId: string,
+    drawId: string,
+    acknowledgedWarningIds: string[],
+    attribution: Attribution,
+  ): DrawEvidenceView {
     this.getCompetition(competitionId);
     const candidate = this.projection.getCandidate(competitionId);
     if (!candidate) {
@@ -213,10 +284,29 @@ export class DrawService {
       );
     }
 
+    // STORY-001-022 AC3: every group-size-minimum warning on this specific
+    // candidate must be acknowledged by id before it can be accepted. A draw
+    // with no such warnings accepts exactly as before this story.
+    const missing = candidate.groupSizeWarnings.filter(
+      (warning) => warning.id && !acknowledgedWarningIds.includes(warning.id),
+    );
+    if (missing.length > 0) {
+      throw new DrawGroupSizeWarningUnacknowledgedError(
+        `The following group-size warning(s) must be acknowledged before accepting this draw: ${missing
+          .map((warning) => warning.message)
+          .join("; ")}`,
+      );
+    }
+
     const record = this.eventStore.append({
       scope: competitionId,
       type: "draw.accepted",
-      payload: { competitionId, drawId: candidate.id, specId: candidate.specId },
+      payload: {
+        competitionId,
+        drawId: candidate.id,
+        specId: candidate.specId,
+        acknowledgedWarningIds,
+      },
       attribution,
     });
     this.projection.apply(record);
@@ -275,44 +365,130 @@ export class DrawService {
     return this.rosterProjection.getRoster(competitionId).length;
   }
 
-  // The binding per-group minimum: the Organiser's override wins (it relaxes
-  // the per-group minimum size only); otherwise the largest of the model
-  // tasks' rule-fixed minima; null everywhere → 1 (no rule minimum, only the
-  // D1 two-per-group rule applies, folded into the bound below).
-  private resolveMin(model: ContestClassModel, override: number | null): number {
-    if (override !== null) return override;
+  // The class model's rule-fixed per-group minimum: the largest of its tasks'
+  // rule-fixed minima; null everywhere → 1 (no rule minimum, only the D1
+  // two-per-group rule applies). No longer influenced by the Organiser's
+  // pre-emptive minGroupSizeOverride (deprecated per D14 consequence 3) — a
+  // genuine shortfall now warns-and-generates instead (STORY-001-022).
+  private resolveMin(model: ContestClassModel): number {
     const mins = model.tasks
       .map((task) => task.minGroupSize)
       .filter((value): value is number => value !== null);
     return mins.length > 0 ? Math.max(...mins) : 1;
   }
 
-  // AC1: with G groups over R seats the smallest group is floor(R/G); require it
-  // ≥ resolvedMin AND ≥ 2 (D1). Equivalently G ≤ floor(R/resolvedMin) and
-  // G ≤ floor(R/2). Reject outside [lower, upper], explaining the bound. The
-  // lower end is 1 when the spare-scorer override is set, else 2 (Area 4.1,
-  // amended 2026-07-12): the override relaxes only the D1 floor — the per-group
-  // minimum and the R/2 ceiling still apply. A groupsPerRound of 1 without the
-  // flag never reaches here: the Zod cross-field refine rejects it first as
-  // VALIDATION_FAILED.
+  // The *only* remaining hard-rejection gate (D14 consequence 1): the D1
+  // two-scoring-pilot floor. With G groups over R seats the smallest group is
+  // floor(R/G); reject only if that would drop below 2. The rule-fixed
+  // minimum's shortfall no longer rejects here — it moves to the
+  // warn-and-generate path (resolveEffectiveGroupsPerRound /
+  // computeGroupSizeMinimumWarning) below.
+  //
+  // A single group (G = 1) is a special case handled separately, not folded
+  // into [lower, upper]: it's permitted either by the Organiser's spare-scorer
+  // override, or — independent of that override — whenever the class model
+  // has a task whose minimum carries the "or all competitors" escape (e.g.
+  // F3B.1.8b Task C: min 8 or all competitors). In the latter case a single
+  // group containing the whole roster is always rule-legal regardless of R
+  // (STORY-001-019 fix). A groupsPerRound of 1 without either allowance never
+  // reaches here for a fresh save — the Zod cross-field refine rejects it
+  // first as VALIDATION_FAILED — but saveSpec pre-parse coercion and
+  // generate's re-check both route through here too.
   private assertGroupBound(
     R: number,
     G: number,
-    resolvedMin: number,
     allowSingleGroup: boolean,
+    allowsAllCompetitorsFallback: boolean,
   ): void {
-    const lower = allowSingleGroup ? 1 : 2;
-    const maxByMin = Math.floor(R / resolvedMin);
+    const singleGroupPermitted = allowSingleGroup || allowsAllCompetitorsFallback;
+    if (G === 1) {
+      if (!singleGroupPermitted) {
+        throw new GroupSizeOutOfBoundsError(
+          `Groups per round must be at least 2 for a roster of ${R} unless the spare-scorer override is set`,
+        );
+      }
+      return;
+    }
     const maxByD1 = Math.floor(R / 2); // D1: every group needs ≥ 2 scoring pilots
-    const upper = Math.min(maxByMin, maxByD1);
-    if (upper < lower || G > upper) {
+    if (maxByD1 < 2 || G > maxByD1) {
+      const singleGroupHint = allowsAllCompetitorsFallback
+        ? ` a single group of all ${R} competitors (groupsPerRound = 1) is always valid for this class instead;`
+        : "";
+      const rangeClause =
+        maxByD1 < 2
+          ? `no groups-per-round value of 2 or more is valid for a roster of ${R}`
+          : `groups per round must be between 2 and ${maxByD1} for a roster of ${R}`;
       throw new GroupSizeOutOfBoundsError(
-        `Groups per round must be between ${lower} and ${Math.max(upper, 0)} for a roster of ${R} ` +
-          `(each group needs at least ${resolvedMin} scoring pilot${resolvedMin === 1 ? "" : "s"} ` +
-          `and at most ${maxByD1} group${maxByD1 === 1 ? "" : "s"} keep two per group); ` +
-          `${G} would force groups below the minimum`,
+        `${rangeClause} (at most ${maxByD1} group${maxByD1 === 1 ? "" : "s"} keep two scoring pilots per group);` +
+          singleGroupHint +
+          ` ${G} would force a group below two`,
       );
     }
+  }
+
+  // STORY-001-022: the "closest available grouping" fallback, merged with its
+  // warning derivation (item 6 of the follow-up review — the two used to be
+  // separate functions that each re-derived floor(R/g) >= resolvedMin and
+  // handed 4-5 parameters back and forth between them; one function keeps the
+  // search and its outcome's warning consistent by construction).
+  //
+  // Returns the requested groups-per-round unchanged whenever it already
+  // clears the resolved rule-fixed minimum (or there is no rule-fixed minimum
+  // at all); otherwise searches downward for the largest group count that
+  // does, never searching above the requested count — "closest" means fewer,
+  // larger groups, never more groups than the Organiser asked for.
+  //
+  // Bug fix (code review): the search floor is 1 (a single whole-roster
+  // group) ONLY when `singleGroupPermitted` — i.e. the CD has already
+  // consented via allowSingleGroup, or the class model carries the "or all
+  // competitors" escape (modelAllowsAllCompetitorsFallback). Collapsing to a
+  // single group is exactly as consent-gated as an explicit
+  // groupsPerRound = 1 request would be (assertGroupBound's own gate); the
+  // fallback must never use the rule-fixed-minimum shortfall as a back door
+  // around that consent requirement. When single-group is NOT permitted, the
+  // search floor is 2: if nothing between the requested count and 2 clears
+  // the minimum, the fallback bottoms out at 2 groups and the warning simply
+  // reports the best it could do.
+  private resolveGroupPlan(
+    model: ContestClassModel,
+    R: number,
+    requestedG: number,
+    resolvedMin: number,
+    singleGroupPermitted: boolean,
+  ): { effectiveG: number; warning: ConstraintWarning | null } {
+    if (resolvedMin <= 1 || Math.floor(R / requestedG) >= resolvedMin) {
+      return { effectiveG: requestedG, warning: null };
+    }
+    const floorG = singleGroupPermitted ? 1 : 2;
+    for (let g = requestedG - 1; g >= floorG; g--) {
+      if (Math.floor(R / g) >= resolvedMin) return { effectiveG: g, warning: null };
+    }
+    const effectiveG = floorG;
+    // Bug fix (code review): a single group containing literally all
+    // competitors is always rule-compliant when the class carries the "or all
+    // competitors" escape (e.g. F3B.1.8b Task C), regardless of the numeric
+    // minimum — so no warning is raised for that case, even though the
+    // fallback only reached G=1 as a last resort.
+    if (effectiveG === 1 && modelAllowsAllCompetitorsFallback(model)) {
+      return { effectiveG, warning: null };
+    }
+    const ruleClause = groupSizeMinimumClauseFor(model);
+    if (!ruleClause) return { effectiveG, warning: null }; // defensive: shouldn't occur since resolvedMin > 1 implies a clause
+    return {
+      effectiveG,
+      warning: {
+        // STORY-001-020 (per-task warnings, deferred) will let multiple
+        // group-size warnings co-occur on one candidate — at that point this
+        // literal id must become task-qualified (e.g. include the task or
+        // metric it came from) so accept()'s by-id acknowledgement filter
+        // still distinguishes them; today there is only ever this one.
+        id: "group-size-minimum",
+        constraint: "group-size-minimum",
+        message:
+          `${model.name}: ${ruleClause} requires at least ${resolvedMin} per group; a roster of ${R} ` +
+          `requesting ${requestedG} group(s) cannot meet it, so ${effectiveG} group(s) were generated instead`,
+      },
+    };
   }
 
   // AC2 soft warnings: constraints that cannot be *jointly* satisfied for this
@@ -374,8 +550,8 @@ export class DrawService {
   // barred from the first group of round r+1. Returns rounds→groups→seatIds, or
   // null if the constraints dead-ended this attempt (anti-repeat degrades
   // gracefully; only the consecutive-flight rule can hard-fail an attempt).
-  private runAttempt(seatIds: string[], spec: DrawSpecification): string[][][] | null {
-    const G = spec.groupsPerRound;
+  private runAttempt(seatIds: string[], spec: DrawSpecification, groupsPerRound: number): string[][][] | null {
+    const G = groupsPerRound;
     const R = seatIds.length;
     const meet = new Map<string, number>();
     let prevGroupIndex: Map<string, number> | null = null;

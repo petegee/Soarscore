@@ -371,3 +371,93 @@ authority.
 - Stock models are **read-only and never deletable**; a model referenced by a
   competition cannot be deleted. Extending the class set is **additive**
   (NFR-2) — a new seeded model, no edit to existing behaviour, data or results.
+
+## D13 — Multi-task classes draw each task independently
+
+*(Decided 2026-07-13.)* A **round's groups are per task, not per round**, for
+any class that flies more than one task per round. F3B flies Duration,
+Distance and Speed within one round, and F3B.1.8b fixes a **different**
+per-group minimum for each (5, 3, and 8-or-all-competitors respectively) —
+strong textual evidence, reinforced by Task C's starting order being allowed
+to derive from cumulative results-so-far, that Speed's grouping is a distinct
+decision from Duration's and Distance's, not a shared one. Collapsing this to
+one grouping per round (the original STORY-001-009 implementation) forces
+every task in the round to satisfy whichever task needs the most competitors
+per group — for F3B, Speed's minimum of 8 — which is stricter than the rule
+requires for Duration and Distance, and structurally prevents Speed from ever
+having its own composition or order.
+
+**Consequences**
+
+- A `RoundDraw` for a multi-task class holds one group composition **per
+  task**; a single-task class continues to hold exactly one, unchanged
+  (additive, NFR-2 — no branch on discipline elsewhere in the draw pipeline).
+- Fairness evidence is reported **per task** where a class draws more than
+  one, so a task with a materially different group size does not blend into
+  or mask another task's fairness figure.
+- Draw acceptance ([4.3](high-level-requirements.md#area-4--draw--rounds-generation))
+  remains **one decision for the whole round's draw** — the Contest Director
+  accepts or re-draws all of a round's task groupings together, not task by
+  task.
+- **STORY-001-020** delivers the per-task domain model, generation and
+  validation; **STORY-001-021** delivers its presentation in the draw
+  workflow screen. Downstream consumers that assumed one grouping per round —
+  draw acceptance evidence, group management, draw reports — must be updated
+  to read per-task groupings for multi-task classes as follow-on work before
+  F3B contests can run end-to-end on this model.
+
+## D14 — Rule-fixed group-size minima are advisory: warn and require override
+
+*(Decided 2026-07-13.)* Every class's rule-fixed per-group minimum (D13's
+per-task minima; F3J 6; F3K 5; F5J 6) is **advisory, not a hard wall**.
+Soarscore's primary use case ([D1](#d1--trust-model-small-known-trusted-group))
+is small local club contests, which routinely cannot field a
+Championship-scaled roster — a club with 6 pilots wanting to fly F3B Speed
+(rule minimum 8, or all competitors) should not be locked out of running the
+task at all. When a roster cannot meet a task's minimum for the requested
+groups-per-round, the system **generates the closest compliant grouping
+anyway**, attaches a warning naming the task and the specific rule clause it
+falls short of, and requires the Contest Director's **explicit
+acknowledgement, scoped to that one contest,** before the draw can be
+accepted. This is the same warn-and-approve shape already established for
+the lone-pilot safeguard and the F3B one-valid-result annulment
+([5.3](high-level-requirements.md#area-5--scoring)) — extended here from
+scoring-time group anomalies to draw-time group-size shortfalls.
+
+**Relationship to D12.** This is **not** the "silent per-field override" D12
+rules out. D12's concern is a *standing* rule deviation (a club that always
+runs smaller groups) being buried in an unnamed per-field tweak instead of a
+named, auditable custom class model. D14 is for the opposite case: an
+*occasional, per-event* shortfall (this week's roster is short a few pilots)
+that a Contest Director consciously accepts for one contest, fully logged
+with its warning and acknowledgement ([D4](#d4--immutable-event-log)). A club
+that structurally and permanently cannot meet a class's minimum should still
+clone a named custom model with a lower `minGroupSize` (D12's path); D14
+exists for the day-to-day variability a standing model change is the wrong
+tool for.
+
+**Consequences**
+
+- Draw generation ([4.2](high-level-requirements.md#area-4--draw--rounds-generation))
+  never refuses to produce a round solely because a task's rule-fixed minimum
+  can't be met by the roster on hand; only the roster-derived two-groups
+  floor ([D1](#d1--trust-model-small-known-trusted-group)) remains a hard
+  bound at save time.
+- Draw acceptance ([4.3](high-level-requirements.md#area-4--draw--rounds-generation))
+  gains a new precondition: a draw carrying an unacknowledged group-size
+  warning cannot be accepted.
+- The pre-emptive numeric `minGroupSizeOverride` field (STORY-001-009) is
+  **superseded** by this mechanism as the primary route past a minimum — it
+  required the Organiser to guess a number in advance and left no record of
+  *why*; D14's warning is generated from the actual attempted specification
+  and is self-explaining in the log.
+- The general D1 floor (every group needs ≥ 2 scoring pilots) is **not**
+  affected by D14 — it already has its own warn-not-block precedent (the
+  lone-pilot flag) and is a scoring-integrity constraint, not an FAI rule
+  number.
+- **STORY-001-022** delivers the detection, warning and acknowledgement
+  mechanism; STORY-001-020's AC4 (F3B Speed's roster-of-6 scenario) depends
+  on it. **STORY-001-023** delivers its companion-app presentation —
+  displaying and acknowledging a warning in the draw workflow screen, and
+  retiring the now-superseded `minGroupSizeOverride` field from the draw
+  specification editor — mirroring how STORY-001-021 presents STORY-001-020.

@@ -94,6 +94,13 @@ export interface TaskParameterSet {
   // draw then falls back to the D1 general bound (≥ 2 scoring pilots). Additive
   // slot only (NFR-2) — no aggregate reshape, no branch on discipline.
   minGroupSize: number | null;
+  // Whether minGroupSize carries the rule's "or all competitors" escape (e.g.
+  // F3B.1.8b Task C: minimum 8 competitors OR all competitors in one group).
+  // False for every task whose minimum has no such exception. When true, a
+  // single group containing the whole roster always satisfies this task's
+  // minimum regardless of roster size — the draw may permit groupsPerRound = 1
+  // for that reason alone, not just via the Organiser's spare-scorer override.
+  minGroupSizeAllCompetitorsFallback: boolean;
 }
 
 export interface ContestClassModel {
@@ -115,6 +122,14 @@ export interface ContestClassModel {
   // man-on-man classes, three for F3B, five for F5K. The flat pointsPerSecond /
   // landingTable that 016 stored are folded into these tasks (NFR-1).
   tasks: TaskParameterSet[];
+}
+
+// Whether any task in this model carries the "or all competitors" escape on
+// its per-group minimum (e.g. F3B.1.8b Task C). When true, a single group
+// containing the whole roster is always a rule-legal draw, independent of the
+// roster-derived per-group minimum (draw, STORY-001-009).
+export function modelAllowsAllCompetitorsFallback(model: ContestClassModel): boolean {
+  return model.tasks.some((task) => task.minGroupSizeAllCompetitorsFallback);
 }
 
 // One changed rule-fixed field of a custom model, versus its stock source.
@@ -224,6 +239,7 @@ function stockTask(
     // Default: the class fixes no per-group minimum; a model overrides this
     // only where its rule doc states one (transcribed with a citation below).
     minGroupSize: null,
+    minGroupSizeAllCompetitorsFallback: false,
     ...partial,
   };
 }
@@ -277,8 +293,9 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         name: "Speed",
         timingPrecision: HUNDREDTH_SECOND,
         speedInverted: true,
-        // Min 8 per group for Speed (F3B.1.8b).
+        // Min 8 per group for Speed, or all competitors in one group (F3B.1.8b).
         minGroupSize: 8,
+        minGroupSizeAllCompetitorsFallback: true,
         penaltyTypes: [
           { code: "safety-plane", label: "Safety-plane crossing", defaultDeduction: 300 },
           { code: "winch-non-conforming", label: "Non-conforming winch", defaultDeduction: 1000 },
@@ -537,6 +554,13 @@ export function deriveDeviations(
     if (task.minGroupSize !== from.minGroupSize) {
       note(`${label}.minGroupSize`, from.minGroupSize, task.minGroupSize);
     }
+    if (task.minGroupSizeAllCompetitorsFallback !== from.minGroupSizeAllCompetitorsFallback) {
+      note(
+        `${label}.minGroupSizeAllCompetitorsFallback`,
+        from.minGroupSizeAllCompetitorsFallback,
+        task.minGroupSizeAllCompetitorsFallback,
+      );
+    }
   });
   // A source task the custom model dropped is a deviation too.
   source.tasks.forEach((task) => {
@@ -628,6 +652,7 @@ const updateTaskSchema = z.object({
   nlhCoefficients: nlhCoefficientsSchema,
   penaltyTypes: z.array(penaltyTypeSchema),
   minGroupSize: z.number().int().positive().nullable(),
+  minGroupSizeAllCompetitorsFallback: z.boolean(),
 });
 
 // Clone request: the Organiser supplies only the new name; all rule-fixed values

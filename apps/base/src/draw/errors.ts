@@ -16,11 +16,16 @@ export class DrawSpecNotFoundError extends DomainError {
   }
 }
 
-// AC1: groups-per-round would force a group below the per-group minimum (from
-// the task model or the spec override), or above the D1 ceiling (R/2). The
-// message states the feasible groups-per-round range so the Organiser can fix
-// it. Validated at both save and generate time against the live roster
-// (Safeguard 6).
+// Post-STORY-001-022 (D14) this is a narrower gate than its name might
+// suggest: the rule-fixed per-group minimum no longer hard-rejects here at
+// all — a genuine shortfall against it now warns-and-generates instead (see
+// DrawService#resolveGroupPlan). This error fires only for the two cases D14
+// left as hard rejections: the D1 two-scoring-pilot floor (at most floor(R/2)
+// groups), and an ungated single group — groupsPerRound = 1 requested (or
+// reached) without the CD's spare-scorer consent (allowSingleGroup) or the
+// class's "or all competitors" escape. The message states the feasible
+// groups-per-round range so the Organiser can fix it. Validated at both save
+// and generate time against the live roster (Safeguard 6).
 export class GroupSizeOutOfBoundsError extends DomainError {
   readonly code = "DRAW_GROUP_SIZE_OUT_OF_BOUNDS";
   constructor(message: string) {
@@ -54,6 +59,18 @@ export class DrawCandidateNotFoundError extends DomainError {
 // wrong draw. The client should re-read the evidence and decide again. 409.
 export class DrawCandidateSupersededError extends DomainError {
   readonly code = "DRAW_CANDIDATE_SUPERSEDED";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+// STORY-001-022 AC3: the candidate carries one or more group-size-minimum
+// warnings (D14) whose ids are absent from the accept request's
+// acknowledgedWarningIds. The message names the missing warning(s) by their
+// own message text, not a generic "unacknowledged" string. 409 — the request
+// conflicts with the contest's current draw state until acknowledged.
+export class DrawGroupSizeWarningUnacknowledgedError extends DomainError {
+  readonly code = "DRAW_GROUP_SIZE_WARNING_UNACKNOWLEDGED";
   constructor(message: string) {
     super(message);
   }

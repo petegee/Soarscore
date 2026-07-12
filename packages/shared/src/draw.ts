@@ -47,9 +47,11 @@ export interface DrawSpecification {
   // round and the first group of the next. Groups are stored ordered either way.
   avoidConsecutiveFlights: boolean;
   lanePolicy: LaneAllocationPolicy;
-  // Organiser override of the rule-derived per-group minimum; null → use the
-  // class model's task minGroupSize. Relaxes only the per-group minimum size —
-  // the D1 two-group floor is allowSingleGroup's concern, below.
+  // Deprecated-in-place (STORY-001-022, D14): the class model's rule-fixed
+  // minima are always resolved now, and a genuine shortfall warns-and-generates
+  // instead of being pre-empted by an Organiser-supplied number. This field is
+  // kept only for backward compatibility with already-saved specs — it has
+  // zero effect on `resolveMin`, `assertGroupBound`, or generation.
   minGroupSizeOverride: number | null;
   // The Area 4.1 spare-scorer override (Decision #1, amended 2026-07-12):
   // records that spare non-flying scorers are present. Normally non-flying
@@ -112,6 +114,11 @@ export interface GeneratedDraw {
   metricValue: number;
   distribution: MatchupDistribution;
   attemptsRun: number;
+  // Rule-fixed per-group-minimum shortfall warnings raised by this specific
+  // generated outcome (STORY-001-022, D14). Empty when the resolved minimum
+  // was met by the groups-per-round actually generated. Each entry gates
+  // acceptance via its `id` until acknowledged.
+  groupSizeWarnings: ConstraintWarning[];
 }
 
 // A soft, non-blocking warning (AC2): a constraint that cannot be *jointly*
@@ -120,6 +127,10 @@ export interface GeneratedDraw {
 export interface ConstraintWarning {
   constraint: string;
   message: string;
+  // Present only for warnings that gate acceptance (the group-size-minimum
+  // kind, STORY-001-022) — the id an acknowledgement references. Absent for
+  // the existing non-gating anti-repeat/consecutive-flight warnings above.
+  id?: string;
 }
 
 // The draw's acceptance state (STORY-001-017, AC2). Exactly three
@@ -188,6 +199,11 @@ export type SaveDrawSpecRequest = z.infer<typeof saveDrawSpecRequestSchema>;
 // in the service so a decision can never attach to a superseded candidate.
 export const drawDecisionRequestSchema = z.object({
   drawId: z.string().min(1, "A draw id is required to accept or cancel"),
+  // The Contest Director's acknowledgement of any group-size-minimum warnings
+  // carried by the candidate (STORY-001-022, D14). Cancel ignores this field
+  // (matching today's shared-schema pattern); a client that never sends it
+  // behaves exactly as before for any draw carrying no such warning.
+  acknowledgedWarningIds: z.array(z.string()).default([]),
 });
 
 export type DrawDecisionRequest = z.infer<typeof drawDecisionRequestSchema>;
@@ -235,5 +251,6 @@ export function generatedDrawToPayload(draw: GeneratedDraw): GeneratedDraw {
       variance: draw.distribution.variance,
       pairs: draw.distribution.pairs.map((p) => ({ a: p.a, b: p.b, count: p.count })),
     },
+    groupSizeWarnings: draw.groupSizeWarnings.map((w) => ({ ...w })),
   };
 }

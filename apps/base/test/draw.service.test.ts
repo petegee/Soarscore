@@ -14,6 +14,7 @@ import { DrawProjection } from "../src/draw/projection.js";
 import { DrawService } from "../src/draw/service.js";
 import {
   DrawGenerationFailedError,
+  DrawGroupSizeWarningUnacknowledgedError,
   DrawSpecNotFoundError,
   GroupSizeOutOfBoundsError,
   ValidationError,
@@ -118,22 +119,25 @@ describe("DrawService", () => {
     expect(view.warnings).toEqual([]);
   });
 
-  it("AC1: rejects groups-per-round that would force groups below the minimum, explaining the bound", () => {
+  it("STORY-001-022: the rule-fixed minimum no longer hard-rejects at save; a genuine shortfall warns at generate instead (F3J's real minimum, 6)", () => {
     const { service, makeCompetition, seedRoster } = build();
-    // F3J fixes minGroupSize 6; use an override of 5 to match the story's AC1
-    // scenario (roster 14, min 5, groups-per-round 4 → only 2 groups of 7 valid).
+    // F3J fixes minGroupSize 6. Previously (pre-STORY-001-022) an override of
+    // 5 made this scenario throw at save; the override no longer has any
+    // effect, and the rule-fixed minimum itself is no longer a save-time hard
+    // bound (D14) — saveSpec now only enforces the D1 two-scoring-pilot floor.
     const comp = makeCompetition(stockModelIdFor("F3J"));
     seedRoster(comp.id, 14);
-    expect(() =>
-      service.saveSpec(comp.id, specInput({ groupsPerRound: 4, minGroupSizeOverride: 5 }), attribution),
-    ).toThrow(GroupSizeOutOfBoundsError);
-    // 2 groups of 7 is valid.
-    const view = service.saveSpec(
-      comp.id,
-      specInput({ groupsPerRound: 2, minGroupSizeOverride: 5 }),
-      attribution,
-    );
-    expect(view.spec?.groupsPerRound).toBe(2);
+    const view = service.saveSpec(comp.id, specInput({ groupsPerRound: 4 }), attribution);
+    expect(view.spec?.groupsPerRound).toBe(4);
+
+    // At generate time, 4 groups over 14 seats (3 per group) falls short of
+    // F3J's real minimum of 6 — the fallback search silently finds 2 groups
+    // of 7, which DOES clear the minimum, so no warning is raised: the
+    // fallback resolved the shortfall entirely, unlike the AC1 scenario below
+    // where no grouping clears it.
+    const draw = service.generate(comp.id, attribution);
+    expect(draw.rounds[0]!.groups).toHaveLength(2);
+    expect(draw.groupSizeWarnings).toEqual([]);
   });
 
   it("AC2: an over-constrained spec saves with populated warnings, not an error", () => {
@@ -315,28 +319,31 @@ describe("DrawService", () => {
     expect(service.getEvidence(comp.id).spec?.allowSingleGroup).toBe(true);
   });
 
-  it("AC7: all other bounds still apply with the override set", () => {
+  it("AC7: the D1 floor (not the deprecated rule-fixed minimum) is what still applies with allowSingleGroup set", () => {
     const { service, makeCompetition, seedRoster } = build();
-    // F3J fixes minGroupSize 6; a roster of 10 supports at most 1 group of ≥ 6,
-    // so groupsPerRound 2 is still out of bounds (409) even with the flag —
-    // the override relaxes only the two-group floor, not the per-group minimum
-    // or the roster-derived ceiling.
+    // F3J fixes minGroupSize 6, but that no longer hard-rejects at save (D14)
+    // — only the D1 two-scoring-pilot floor does. A roster of 10 supports at
+    // most floor(10/2) = 5 groups under D1, so groupsPerRound 6 is still out
+    // of bounds (409) even with the flag.
     const comp = makeCompetition(stockModelIdFor("F3J"));
     seedRoster(comp.id, 10);
     expect(() =>
       service.saveSpec(
         comp.id,
-        specInput({ groupsPerRound: 2, allowSingleGroup: true }),
+        specInput({ groupsPerRound: 6, allowSingleGroup: true }),
         attribution,
       ),
     ).toThrow(GroupSizeOutOfBoundsError);
-    // ...while the single group those 10 pilots CAN sustain is now saveable.
+    // groupsPerRound 2 is within the D1 ceiling (5) and now saveable — pre-022
+    // this would have thrown because 10 seats over 2 groups (5 each) falls
+    // short of F3J's minimum of 6; that shortfall is a generate-time warning
+    // now, not a save-time rejection.
     const view = service.saveSpec(
       comp.id,
-      specInput({ groupsPerRound: 1, allowSingleGroup: true }),
+      specInput({ groupsPerRound: 2, allowSingleGroup: true }),
       attribution,
     );
-    expect(view.spec?.groupsPerRound).toBe(1);
+    expect(view.spec?.groupsPerRound).toBe(2);
   });
 
   it("AC7: single group + no-back-to-back over multiple rounds warns at save (AC2)", () => {
@@ -358,6 +365,55 @@ describe("DrawService", () => {
     expect(view.warnings.map((w) => w.constraint)).toContain("avoid-consecutive-flights");
   });
 
+  it("STORY-001-019 fix: F3B's Speed 'or all competitors' escape auto-permits a single group for a roster of 8, without the spare-scorer override", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 8);
+    // No allowSingleGroup flag set — F3B.1.8b's Speed rule (min 8 or all
+    // competitors) makes a single group of all 8 legal on its own account.
+    const view = service.saveSpec(comp.id, specInput({ groupsPerRound: 1 }), attribution);
+    expect(view.spec?.groupsPerRound).toBe(1);
+    expect(view.spec?.allowSingleGroup).toBe(true);
+  });
+
+  it("Bug fix (code review): F3B's per-group minimum shortfall (F3B.1.8b's 8) collapses to a single all-competitors group with NO warning, since F3B carries the 'or all competitors' escape", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 5);
+    // A roster of 5 can never clear F3B.1.8b's numeric minimum of 8, however
+    // grouped. D1 alone (maxByD1 = floor(5/2) = 2) permits groupsPerRound = 2,
+    // so save succeeds.
+    const view = service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    expect(view.spec?.groupsPerRound).toBe(2);
+
+    const draw = service.generate(comp.id, attribution);
+    // No G in [1, 1] clears the numeric minimum (floor(5/1) = 5 < 8), so the
+    // fallback bottoms out at a single whole-roster group of all 5 — F3B
+    // carries the "or all competitors" escape (modelAllowsAllCompetitorsFallback),
+    // so a single group containing literally everyone is always rule-compliant
+    // on its own account. There is no genuine shortfall here, so no warning.
+    expect(draw.rounds[0]!.groups).toHaveLength(1);
+    expect(draw.groupSizeWarnings).toEqual([]);
+  });
+
+  it("Bug fix (code review): F3J roster of 10, groupsPerRound 2, allowSingleGroup false — the fallback must NOT silently collapse to a single group without the D1 spare-scorer consent", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3J"));
+    seedRoster(comp.id, 10);
+    // F3J's resolved minimum is 6. floor(10/2) = 5 < 6, so groupsPerRound = 2
+    // falls short. F3J has no "or all competitors" escape, and allowSingleGroup
+    // defaults to false (no spare-scorer consent given) — the fallback search
+    // must not be allowed to use the numeric shortfall as a back door into an
+    // ungated single group; it must bottom out at 2 groups instead, with a
+    // warning reporting the best it could do.
+    service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    const draw = service.generate(comp.id, attribution);
+    expect(draw.rounds[0]!.groups).toHaveLength(2);
+    expect(draw.groupSizeWarnings).toHaveLength(1);
+    expect(draw.groupSizeWarnings[0]!.message).toContain("F3J.6.1");
+    expect(draw.groupSizeWarnings[0]!.message).toContain("2 group(s) were generated instead");
+  });
+
   it("re-saving a spec keeps its id stable", () => {
     const { service, makeCompetition, seedRoster } = build();
     const comp = makeCompetition(stockModelIdFor("F5L"));
@@ -366,5 +422,113 @@ describe("DrawService", () => {
     const second = service.saveSpec(comp.id, specInput({ roundCount: 5 }), attribution);
     expect(second.spec?.id).toBe(first.spec?.id);
     expect(second.spec?.roundCount).toBe(5);
+  });
+});
+
+describe("DrawService — STORY-001-022 warn-and-override group-size minima (D14)", () => {
+  it("AC1: F3J roster of 5 generates successfully with a single group-size-minimum warning citing F3J.6", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3J"));
+    seedRoster(comp.id, 5);
+    service.saveSpec(
+      comp.id,
+      specInput({ groupsPerRound: 1, allowSingleGroup: true }),
+      attribution,
+    );
+    const draw = service.generate(comp.id, attribution);
+    expect(draw.rounds[0]!.groups).toHaveLength(1);
+    expect(draw.groupSizeWarnings).toHaveLength(1);
+    const warning = draw.groupSizeWarnings[0]!;
+    expect(warning.id).toBe("group-size-minimum");
+    expect(warning.constraint).toBe("group-size-minimum");
+    expect(warning.message).toContain("F3J.6");
+    expect(warning.message).toContain("5");
+    expect(warning.message).toContain("6");
+  });
+
+  it("AC3: accepting a candidate with an unacknowledged group-size-minimum warning is rejected, naming the warning", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3J"));
+    seedRoster(comp.id, 5);
+    service.saveSpec(
+      comp.id,
+      specInput({ groupsPerRound: 1, allowSingleGroup: true }),
+      attribution,
+    );
+    const candidate = service.generate(comp.id, attribution);
+    expect(candidate.groupSizeWarnings).toHaveLength(1);
+
+    let caught: unknown;
+    try {
+      service.accept(comp.id, candidate.id, [], attribution);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DrawGroupSizeWarningUnacknowledgedError);
+    expect((caught as Error).message).toContain(candidate.groupSizeWarnings[0]!.message);
+  });
+
+  it("AC4: accepting with the warning id acknowledged succeeds, and the appended draw.accepted event records it", () => {
+    const { service, makeCompetition, seedRoster, eventStore } = build();
+    const comp = makeCompetition(stockModelIdFor("F3J"));
+    seedRoster(comp.id, 5);
+    service.saveSpec(
+      comp.id,
+      specInput({ groupsPerRound: 1, allowSingleGroup: true }),
+      attribution,
+    );
+    const candidate = service.generate(comp.id, attribution);
+
+    const view = service.accept(comp.id, candidate.id, ["group-size-minimum"], attribution);
+    expect(view.status).toBe("accepted");
+
+    const acceptedEvents = eventStore.readAll().filter((e) => e.type === "draw.accepted");
+    expect(acceptedEvents).toHaveLength(1);
+    expect(acceptedEvents[0]!.payload).toMatchObject({
+      acknowledgedWarningIds: ["group-size-minimum"],
+    });
+  });
+
+  it("AC5: F3J roster of 12 with groupsPerRound 2 meets the minimum exactly (12/2=6) — no warnings (inclusive boundary)", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3J"));
+    seedRoster(comp.id, 12);
+    service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    const draw = service.generate(comp.id, attribution);
+    expect(draw.rounds[0]!.groups).toHaveLength(2);
+    expect(draw.groupSizeWarnings).toEqual([]);
+  });
+
+  it("AC6: classes with no rule-fixed minimum (F5K, F5L) never raise a group-size-minimum warning", () => {
+    const { service, makeCompetition, seedRoster } = build();
+
+    const f5k = makeCompetition(stockModelIdFor("F5K"));
+    seedRoster(f5k.id, 3);
+    service.saveSpec(f5k.id, specInput({ groupsPerRound: 1, allowSingleGroup: true }), attribution);
+    expect(service.generate(f5k.id, attribution).groupSizeWarnings).toEqual([]);
+
+    const f5l = makeCompetition(stockModelIdFor("F5L"));
+    seedRoster(f5l.id, 3);
+    service.saveSpec(f5l.id, specInput({ groupsPerRound: 1, allowSingleGroup: true }), attribution);
+    expect(service.generate(f5l.id, attribution).groupSizeWarnings).toEqual([]);
+  });
+
+  it("Regression: minGroupSizeOverride has zero effect on generation or warnings now", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3J"));
+    seedRoster(comp.id, 5);
+    service.saveSpec(
+      comp.id,
+      specInput({ groupsPerRound: 1, allowSingleGroup: true, minGroupSizeOverride: 999 }),
+      attribution,
+    );
+    const draw = service.generate(comp.id, attribution);
+    // Identical to the override-free AC1 scenario above: still one warning,
+    // still citing the real rule-fixed minimum of 6, not the override.
+    expect(draw.rounds[0]!.groups).toHaveLength(1);
+    expect(draw.groupSizeWarnings).toHaveLength(1);
+    expect(draw.groupSizeWarnings[0]!.message).toContain("F3J.6");
+    expect(draw.groupSizeWarnings[0]!.message).toContain("6");
+    expect(draw.groupSizeWarnings[0]!.message).not.toContain("999");
   });
 });

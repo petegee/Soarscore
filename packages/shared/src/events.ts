@@ -116,6 +116,7 @@ export function copyTaskParameterSet(task: TaskParameterSet): TaskParameterSet {
     nlhCoefficients: task.nlhCoefficients ? { ...task.nlhCoefficients } : null,
     penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
     minGroupSize: task.minGroupSize,
+    minGroupSizeAllCompetitorsFallback: task.minGroupSizeAllCompetitorsFallback,
   };
 }
 
@@ -336,6 +337,11 @@ export interface DrawAcceptedPayload {
   competitionId: string;
   drawId: string;
   specId: string;
+  // Which group-size-minimum warning ids the Contest Director acknowledged
+  // (STORY-001-022, D4/D14). Additive field on an append-only event log —
+  // older events predate it, so the projection must default a missing value
+  // to [] on replay, never throw.
+  acknowledgedWarningIds: string[];
 }
 
 export interface DrawCancelledPayload {

@@ -107,7 +107,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     const comp = readyCompetition();
     const candidate = service.generate(comp.id, organiser);
 
-    const view = service.accept(comp.id, candidate.id, cd);
+    const view = service.accept(comp.id, candidate.id, [], cd);
     expect(view.status).toBe("accepted");
     expect(view.accepted).toEqual(candidate);
 
@@ -118,6 +118,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
       competitionId: comp.id,
       drawId: candidate.id,
       specId: candidate.specId,
+      acknowledgedWarningIds: [],
     });
     // The authority guard (Safeguard 6): CD, not the app-wide organiser.
     expect(accepted[0]!.attribution.authority).toBe("contest-director");
@@ -130,7 +131,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     expect(service.getEvidence(comp.id).status).toBe("no-draw");
     const candidate = service.generate(comp.id, organiser);
     expect(service.getEvidence(comp.id).status).toBe("awaiting-decision");
-    service.accept(comp.id, candidate.id, cd);
+    service.accept(comp.id, candidate.id, [], cd);
     expect(service.getEvidence(comp.id).status).toBe("accepted");
   });
 
@@ -143,7 +144,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     expect(service.getEvidence(comp.id).accepted).toBeNull();
     expect(drawStateProvider.hasAcceptedDraw(comp.id)).toBe(false);
 
-    service.accept(comp.id, candidate.id, cd);
+    service.accept(comp.id, candidate.id, [], cd);
     expect(service.getEvidence(comp.id).accepted?.id).toBe(candidate.id);
     expect(drawStateProvider.hasAcceptedDraw(comp.id)).toBe(true);
   });
@@ -162,7 +163,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     expect(view.spec).not.toBeNull();
     const regenerated = service.generate(comp.id, organiser);
     expect(regenerated.id).not.toBe(candidate.id);
-    const accepted = service.accept(comp.id, regenerated.id, cd);
+    const accepted = service.accept(comp.id, regenerated.id, [], cd);
     expect(accepted.status).toBe("accepted");
 
     const cancelled = eventStore.readAll().filter((e) => e.type === "draw.cancelled");
@@ -176,7 +177,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     const { service, eventStore, readyCompetition } = build();
     const comp = readyCompetition();
     const before = eventStore.readAll().length;
-    expect(() => service.accept(comp.id, "any-id", cd)).toThrow(DrawCandidateNotFoundError);
+    expect(() => service.accept(comp.id, "any-id", [], cd)).toThrow(DrawCandidateNotFoundError);
     expect(() => service.cancel(comp.id, "any-id", cd)).toThrow(DrawCandidateNotFoundError);
     expect(eventStore.readAll().length).toBe(before);
   });
@@ -189,11 +190,11 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     expect(second.id).not.toBe(first.id);
 
     const before = eventStore.readAll().length;
-    expect(() => service.accept(comp.id, first.id, cd)).toThrow(DrawCandidateSupersededError);
+    expect(() => service.accept(comp.id, first.id, [], cd)).toThrow(DrawCandidateSupersededError);
     expect(() => service.cancel(comp.id, first.id, cd)).toThrow(DrawCandidateSupersededError);
     expect(eventStore.readAll().length).toBe(before);
 
-    const view = service.accept(comp.id, second.id, cd);
+    const view = service.accept(comp.id, second.id, [], cd);
     expect(view.accepted?.id).toBe(second.id);
     // No accepted state references the superseded attempt.
     expect(view.accepted?.id).not.toBe(first.id);
@@ -205,7 +206,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     const first = service.generate(comp.id, organiser);
     service.cancel(comp.id, first.id, cd);
     const second = service.generate(comp.id, organiser);
-    service.accept(comp.id, second.id, cd);
+    service.accept(comp.id, second.id, [], cd);
 
     const all = eventStore.readAll();
     const decisions = all.filter(
@@ -223,7 +224,7 @@ describe("DrawService accept/cancel (STORY-001-017)", () => {
     const { service, eventStore, drawProjection, readyCompetition } = build();
     const comp = readyCompetition();
     const candidate = service.generate(comp.id, organiser);
-    service.accept(comp.id, candidate.id, cd);
+    service.accept(comp.id, candidate.id, [], cd);
 
     const fresh = new DrawProjection();
     fresh.rebuild(eventStore.readAll());

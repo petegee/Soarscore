@@ -133,6 +133,9 @@ export class DrawProjection {
         variance: draw.distribution.variance,
         pairs: draw.distribution.pairs.map((p) => ({ a: p.a, b: p.b, count: p.count })),
       },
+      // Older stored draw.generated payloads (pre-STORY-001-022) predate this
+      // field entirely — default to [] on replay rather than throw (D4).
+      groupSizeWarnings: (draw.groupSizeWarnings ?? []).map((w) => ({ ...w })),
     };
   }
 }

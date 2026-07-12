@@ -71,6 +71,7 @@ import {
   DrawCandidateNotFoundError,
   DrawCandidateSupersededError,
   DrawGenerationFailedError,
+  DrawGroupSizeWarningUnacknowledgedError,
   DrawSpecNotFoundError,
   GroupSizeOutOfBoundsError,
 } from "./draw/errors.js";
@@ -357,6 +358,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
       return;
     }
     if (error instanceof DrawCandidateSupersededError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof DrawGroupSizeWarningUnacknowledgedError) {
       reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }

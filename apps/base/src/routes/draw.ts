@@ -68,8 +68,13 @@ export function registerDrawRoutes(app: FastifyInstance, drawService: DrawServic
     "/api/competitions/:competitionId/draw/accept",
     async (request) => {
       const attribution = cdAttributionFromHeaders(request.headers as Record<string, unknown>);
-      const { drawId } = parseDecision(request.body);
-      return drawService.accept(request.params.competitionId, drawId, attribution);
+      const { drawId, acknowledgedWarningIds } = parseDecision(request.body);
+      return drawService.accept(
+        request.params.competitionId,
+        drawId,
+        acknowledgedWarningIds,
+        attribution,
+      );
     },
   );
 

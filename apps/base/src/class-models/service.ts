@@ -208,6 +208,7 @@ export class ClassModelService {
       nlhCoefficients: task.nlhApplicable ? task.nlhCoefficients : null,
       penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
       minGroupSize: task.minGroupSize,
+      minGroupSizeAllCompetitorsFallback: task.minGroupSizeAllCompetitorsFallback,
     };
   }
 
