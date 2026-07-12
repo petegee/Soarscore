@@ -376,7 +376,19 @@ describe("DrawService", () => {
     expect(view.spec?.allowSingleGroup).toBe(true);
   });
 
-  it("Bug fix (code review): F3B's per-group minimum shortfall (F3B.1.8b's 8) collapses to a single all-competitors group with NO warning, since F3B carries the 'or all competitors' escape", () => {
+  it("STORY-001-020 migration of the pre-story 'Bug fix (code review)' test: F3B's per-task minima now resolve independently — Speed's own 'or all competitors' escape still collapses to a single all-competitors group with NO warning, but Duration/Distance now warn on their OWN (unmet) minima instead of being silently absorbed into Speed's whole-model minimum", () => {
+    // Pre-STORY-001-020 this test asserted the OLD, over-constrained
+    // whole-model behaviour this very story replaces: resolveMin took
+    // Math.max(5, 3, 8) = 8 for the whole round, so ALL three tasks collapsed
+    // to Speed's single all-competitors group with zero warnings. Now each
+    // task resolves its own minimum independently (D13/D14): Duration (min 5)
+    // and Distance (min 3) neither clear floor(5/2)=2, and neither carries
+    // the "or all competitors" escape, so both now warn and bottom out at
+    // their own requested 2 groups; only Speed (which does carry the escape)
+    // still collapses to one group of all 5, with no warning. The flat
+    // groups/groupSizeWarnings fields mirror taskGroups[0]/the full per-task
+    // warning set (Duration is task index 0 for F3B), so they now show 2
+    // groups and 2 warnings rather than the old 1 group / 0 warnings.
     const { service, makeCompetition, seedRoster } = build();
     const comp = makeCompetition(stockModelIdFor("F3B"));
     seedRoster(comp.id, 5);
@@ -387,13 +399,29 @@ describe("DrawService", () => {
     expect(view.spec?.groupsPerRound).toBe(2);
 
     const draw = service.generate(comp.id, attribution);
-    // No G in [1, 1] clears the numeric minimum (floor(5/1) = 5 < 8), so the
-    // fallback bottoms out at a single whole-roster group of all 5 — F3B
-    // carries the "or all competitors" escape (modelAllowsAllCompetitorsFallback),
-    // so a single group containing literally everyone is always rule-compliant
-    // on its own account. There is no genuine shortfall here, so no warning.
-    expect(draw.rounds[0]!.groups).toHaveLength(1);
-    expect(draw.groupSizeWarnings).toEqual([]);
+    const [duration, distance, speed] = draw.rounds[0]!.taskGroups;
+
+    // Speed: no G in [1, 1] clears its own numeric minimum (floor(5/1) = 5 < 8),
+    // so its fallback bottoms out at a single whole-roster group of all 5 — it
+    // carries the "or all competitors" escape, so this is always rule-compliant
+    // on its own account and raises no warning.
+    expect(speed!.groups).toHaveLength(1);
+    expect(speed!.groups[0]!.members).toHaveLength(5);
+
+    // Duration/Distance: floor(5/2)=2 clears neither's minimum (5 or 3), and
+    // neither carries the escape, so both bottom out at their own requested
+    // 2 groups, each with its own task-qualified warning.
+    expect(duration!.groups).toHaveLength(2);
+    expect(distance!.groups).toHaveLength(2);
+    expect(draw.groupSizeWarnings).toHaveLength(2);
+    const warningIds = draw.groupSizeWarnings.map((w) => w.id);
+    expect(warningIds).toContain(`group-size-minimum:${duration!.taskId}`);
+    expect(warningIds).toContain(`group-size-minimum:${distance!.taskId}`);
+    expect(warningIds).not.toContain(`group-size-minimum:${speed!.taskId}`);
+
+    // Flat back-compat view mirrors taskGroups[0] (Duration for F3B), so it
+    // now shows 2 groups rather than the old whole-model collapse to 1.
+    expect(draw.rounds[0]!.groups).toEqual(duration!.groups);
   });
 
   it("Bug fix (code review): F3J roster of 10, groupsPerRound 2, allowSingleGroup false — the fallback must NOT silently collapse to a single group without the D1 spare-scorer consent", () => {
@@ -439,9 +467,13 @@ describe("DrawService — STORY-001-022 warn-and-override group-size minima (D14
     expect(draw.rounds[0]!.groups).toHaveLength(1);
     expect(draw.groupSizeWarnings).toHaveLength(1);
     const warning = draw.groupSizeWarnings[0]!;
-    expect(warning.id).toBe("group-size-minimum");
+    // STORY-001-020: the id is now task-qualified (`group-size-minimum:<taskId>`)
+    // rather than the bare literal, so multiple co-occurring per-task warnings
+    // stay independently acknowledgeable; F3J has exactly one task ("Duration").
+    expect(warning.id).toBe("group-size-minimum:stock-f3j-task");
     expect(warning.constraint).toBe("group-size-minimum");
     expect(warning.message).toContain("F3J.6");
+    expect(warning.message).toContain("Duration");
     expect(warning.message).toContain("5");
     expect(warning.message).toContain("6");
   });
@@ -479,13 +511,17 @@ describe("DrawService — STORY-001-022 warn-and-override group-size minima (D14
     );
     const candidate = service.generate(comp.id, attribution);
 
-    const view = service.accept(comp.id, candidate.id, ["group-size-minimum"], attribution);
+    // STORY-001-020: the warning id is task-qualified now — acknowledge the
+    // candidate's actual id rather than the old bare literal.
+    const warningId = candidate.groupSizeWarnings[0]!.id!;
+    expect(warningId).toBe("group-size-minimum:stock-f3j-task");
+    const view = service.accept(comp.id, candidate.id, [warningId], attribution);
     expect(view.status).toBe("accepted");
 
     const acceptedEvents = eventStore.readAll().filter((e) => e.type === "draw.accepted");
     expect(acceptedEvents).toHaveLength(1);
     expect(acceptedEvents[0]!.payload).toMatchObject({
-      acknowledgedWarningIds: ["group-size-minimum"],
+      acknowledgedWarningIds: [warningId],
     });
   });
 
@@ -530,5 +566,187 @@ describe("DrawService — STORY-001-022 warn-and-override group-size minima (D14
     expect(draw.groupSizeWarnings[0]!.message).toContain("F3J.6");
     expect(draw.groupSizeWarnings[0]!.message).toContain("6");
     expect(draw.groupSizeWarnings[0]!.message).not.toContain("999");
+  });
+});
+
+describe("DrawService — STORY-001-020 per-task draw grouping and generation (F3B)", () => {
+  it("AC1: F3B draws each task its own independent group composition (3 taskGroups entries, not required identical)", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 12);
+    service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    const draw = service.generate(comp.id, attribution);
+
+    const taskGroups = draw.rounds[0]!.taskGroups;
+    expect(taskGroups).toHaveLength(3);
+    expect(taskGroups.map((tg) => tg.taskName)).toEqual(["Duration", "Distance", "Speed"]);
+
+    // Not required to be identical: Speed collapses to a single all-competitors
+    // group (AC3 below) while Duration/Distance keep 2 groups each — a
+    // structural difference in shape alone already proves independence, but
+    // assert membership differs too.
+    const durationG0 = taskGroups[0]!.groups[0]!.members.map((m) => m.rosterEntryId).sort();
+    const speedG0 = taskGroups[2]!.groups[0]!.members.map((m) => m.rosterEntryId).sort();
+    expect(durationG0).not.toEqual(speedG0);
+  });
+
+  it("AC2: Duration and Distance each generate 2 groups of 6 (their own minima of 5/3 cleared by 6), no warnings for either", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 12);
+    service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    const draw = service.generate(comp.id, attribution);
+
+    const [duration, distance] = draw.rounds[0]!.taskGroups;
+    expect(duration!.groups).toHaveLength(2);
+    expect(duration!.groups.every((g) => g.members.length === 6)).toBe(true);
+    expect(distance!.groups).toHaveLength(2);
+    expect(distance!.groups.every((g) => g.members.length === 6)).toBe(true);
+
+    const warningConstraintsByTask = draw.groupSizeWarnings.map((w) => w.id);
+    expect(warningConstraintsByTask).not.toContain(`group-size-minimum:${duration!.taskId}`);
+    expect(warningConstraintsByTask).not.toContain(`group-size-minimum:${distance!.taskId}`);
+  });
+
+  it("AC3: Speed's 'or all competitors' escape collapses to a single group of all 12, with zero warning", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 12);
+    service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    const draw = service.generate(comp.id, attribution);
+
+    const speed = draw.rounds[0]!.taskGroups[2]!;
+    expect(speed.taskName).toBe("Speed");
+    expect(speed.groups).toHaveLength(1);
+    expect(speed.groups[0]!.members).toHaveLength(12);
+    expect(draw.groupSizeWarnings.map((w) => w.id)).not.toContain(`group-size-minimum:${speed.taskId}`);
+  });
+
+  it("AC4: a task without the 'or all competitors' escape (Duration) that falls short of its own minimum warns, task-qualified, naming the task and citing F3B.1.8 b", () => {
+    // Deviation from the Canvas's literal AC4 text (which names "Speed" as the
+    // warning-raising task): Speed's minGroupSizeAllCompetitorsFallback is
+    // unconditionally true in the seeded F3B model (packages/shared/src/
+    // class-model.ts), so per resolveGroupPlanForTask's own rule (and
+    // Safeguard 5, "Speed's ... escape must never produce a warning when it
+    // resolves to a single whole-roster group ... AC3") Speed can never raise
+    // this warning for any roster size — it always bottoms out at
+    // effectiveG=1 with warning=null. Duration (which carries no such escape)
+    // is used here instead to exercise the identical task-qualified-warning
+    // mechanism the Canvas describes; the assertions (exactly one warning,
+    // task-qualified id, task named in the message, F3B.1.8 b cited) are
+    // otherwise unchanged from the Canvas's intent.
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 6);
+    service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    const draw = service.generate(comp.id, attribution);
+
+    const [duration, distance, speed] = draw.rounds[0]!.taskGroups;
+    // Distance's min (3) is exactly met by floor(6/2)=3 (inclusive boundary).
+    expect(distance!.groups).toHaveLength(2);
+    // Speed collapses to the all-competitors escape, no warning (AC3 pattern).
+    expect(speed!.groups).toHaveLength(1);
+    expect(speed!.groups[0]!.members).toHaveLength(6);
+    // Duration's min (5) is NOT met by floor(6/2)=3, and Duration has no
+    // escape, so it bottoms out at its requested 2 groups with a warning.
+    expect(duration!.groups).toHaveLength(2);
+
+    expect(draw.groupSizeWarnings).toHaveLength(1);
+    const warning = draw.groupSizeWarnings[0]!;
+    expect(warning.id).toBe(`group-size-minimum:${duration!.taskId}`);
+    expect(warning.message).toContain("Duration");
+    expect(warning.message).toContain("F3B.1.8 b");
+  });
+
+  it("AC5 (regression): a single-task class (F5J) is byte-for-byte unaffected — flat fields unchanged, taskGroups/taskDistributions each carry exactly one mirroring entry", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F5J"));
+    seedRoster(comp.id, 12);
+    service.saveSpec(
+      comp.id,
+      specInput({ roundCount: 3, groupsPerRound: 3, fairnessMetric: "min-total-excess" }),
+      attribution,
+    );
+    const draw = service.generate(comp.id, attribution);
+
+    // The pre-story assertions, unmodified (mirrors the existing AC4 test
+    // above): the flat view is exactly as before this story.
+    expect(draw.attemptsRun).toBe(200);
+    expect(draw.metric).toBe("min-total-excess");
+    expect(draw.metricValue).toBe(draw.distribution.totalExcessMeets);
+    expect(draw.distribution.pairs.length).toBeGreaterThan(0);
+
+    for (const round of draw.rounds) {
+      expect(round.taskGroups).toHaveLength(1);
+      expect(round.taskGroups[0]!.groups).toEqual(round.groups);
+    }
+    expect(draw.taskDistributions).toHaveLength(1);
+    expect(draw.taskDistributions[0]!.distribution).toEqual(draw.distribution);
+    expect(draw.taskDistributions[0]!.metricValue).toBe(draw.metricValue);
+  });
+
+  it("AC6: each task's fairness evidence is isolated — a taskDistribution's pairs only ever reflect that task's own placement, never blended with a sibling task's grouping", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 12);
+    service.saveSpec(comp.id, specInput({ groupsPerRound: 2 }), attribution);
+    const draw = service.generate(comp.id, attribution);
+
+    for (let taskIdx = 0; taskIdx < 3; taskIdx++) {
+      // Recompute this task's own meet-counts directly from its own
+      // taskGroups across all rounds — the independent source of truth.
+      const actualMeets = new Map<string, number>();
+      for (const round of draw.rounds) {
+        for (const group of round.taskGroups[taskIdx]!.groups) {
+          const ids = group.members.map((m) => m.rosterEntryId);
+          for (let i = 0; i < ids.length; i++) {
+            for (let j = i + 1; j < ids.length; j++) {
+              const [a, b] = ids[i]! < ids[j]! ? [ids[i]!, ids[j]!] : [ids[j]!, ids[i]!];
+              const key = `${a}|${b}`;
+              actualMeets.set(key, (actualMeets.get(key) ?? 0) + 1);
+            }
+          }
+        }
+      }
+      const reportedPairs = draw.taskDistributions[taskIdx]!.distribution.pairs;
+      for (const pair of reportedPairs) {
+        const key = `${pair.a}|${pair.b}`;
+        expect(actualMeets.get(key)).toBe(pair.count);
+      }
+      // Every actual meet is reported too (no silent omission).
+      for (const [key, count] of actualMeets) {
+        const [a, b] = key.split("|") as [string, string];
+        const found = reportedPairs.find((p) => p.a === a && p.b === b);
+        expect(found?.count).toBe(count);
+      }
+    }
+  });
+
+  it("NFR: F3B generation for a 20-pilot, 8-round fixture completes within a generous wall-clock bound (documents the ~3x attempt-loop cost)", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F3B"));
+    seedRoster(comp.id, 20);
+    service.saveSpec(comp.id, specInput({ roundCount: 8, groupsPerRound: 4 }), attribution);
+
+    const start = Date.now();
+    const draw = service.generate(comp.id, attribution);
+    const elapsedMs = Date.now() - start;
+
+    expect(draw.rounds).toHaveLength(8);
+    // Measured, not assumed (Safeguard 2): at this ceiling (20 pilots, 8
+    // rounds, 4 groups/round, 3 F3B tasks x 200 attempts = 600 total
+    // randomised attempt/refine/globalRefine passes) this repo's existing
+    // hill-climb + 4-pass global-refine algorithm (runAttempt/globalRefine,
+    // unchanged by this story) measured ~20s locally — noticeably above a
+    // "couple of seconds" feel, though still well within a CD's tolerance for
+    // a one-off per-round generate action, and the bound below is set with
+    // headroom over the measured figure rather than tuned tight to it. This
+    // is worth flagging as a possible follow-on performance concern for F3B
+    // specifically (3x the single-task cost), but optimising runAttempt/
+    // globalRefine's algorithmic cost is out of scope for this story, which
+    // only calls the existing pipeline more times, per Safeguard 7. This repo
+    // has no prior timing-assertion convention (no existing test uses
+    // Date.now()/performance.now()) — this is the first.
+    expect(elapsedMs).toBeLessThan(30000);
   });
 });

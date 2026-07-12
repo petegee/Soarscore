@@ -79,10 +79,29 @@ export interface FlightGroup {
   lonePilotFlagged: boolean;
 }
 
-// One qualifying round's ordered flight groups.
+// One task's independent group composition within a round (STORY-001-020).
+// taskId/taskName are denormalised from the class model's TaskParameterSet at
+// generation time (mirrors DrawSpecification.classModelId's denormalisation
+// precedent) so a stored draw remains self-describing even if the class model
+// is later edited or cloned.
+export interface TaskGroupSet {
+  taskId: string;
+  taskName: string;
+  groups: FlightGroup[];
+}
+
+// One qualifying round's ordered flight groups. taskGroups carries one entry
+// per ContestClassModel.tasks entry, each with that task's own independent
+// composition (STORY-001-020) — never empty once a round has been generated.
+// groups remains required and always populated as a back-compat flat view: it
+// always equals taskGroups[0].groups exactly, by construction in the service
+// (single-task classes: their one task, verbatim; multi-task classes: the
+// first task's real, valid grouping — e.g. F3B's Duration — until
+// STORY-001-021 gives consumers the full per-task view).
 export interface RoundDraw {
   roundNumber: number;
   groups: FlightGroup[];
+  taskGroups: TaskGroupSet[];
 }
 
 // The anti-repeat evidence for the retained attempt (AC4). Each pair's meet
@@ -101,6 +120,16 @@ export interface MatchupDistribution {
   variance: number;
 }
 
+// One task's fairness evidence within a generated draw (STORY-001-020),
+// computed only from that task's own placement's pairings — never blended
+// across tasks. Same taskId/taskName denormalisation rule as TaskGroupSet.
+export interface TaskMatchupDistribution {
+  taskId: string;
+  taskName: string;
+  distribution: MatchupDistribution;
+  metricValue: number;
+}
+
 // The fully materialised generated outcome (Safeguard 3). The draw.generated
 // payload IS this — never an RNG seed — so event-log replay reproduces the
 // identical draw with no RNG in the projection (D4). metricValue is the chosen
@@ -117,8 +146,15 @@ export interface GeneratedDraw {
   // Rule-fixed per-group-minimum shortfall warnings raised by this specific
   // generated outcome (STORY-001-022, D14). Empty when the resolved minimum
   // was met by the groups-per-round actually generated. Each entry gates
-  // acceptance via its `id` until acknowledged.
+  // acceptance via its `id` until acknowledged. Task-qualified ids
+  // (`group-size-minimum:<taskId>`, STORY-001-020) let multiple co-occurring
+  // per-task warnings stay independently acknowledgeable.
   groupSizeWarnings: ConstraintWarning[];
+  // Per-task fairness evidence (STORY-001-020) — one entry per
+  // ContestClassModel.tasks entry, same ordering rule as rounds[].taskGroups.
+  // The flat distribution/metricValue fields above always mirror
+  // taskDistributions[0] (same pairing rule as groups/taskGroups[0]).
+  taskDistributions: TaskMatchupDistribution[];
 }
 
 // A soft, non-blocking warning (AC2): a constraint that cannot be *jointly*
@@ -244,6 +280,15 @@ export function generatedDrawToPayload(draw: GeneratedDraw): GeneratedDraw {
         lonePilotFlagged: group.lonePilotFlagged,
         members: group.members.map((m) => ({ rosterEntryId: m.rosterEntryId, lane: m.lane })),
       })),
+      taskGroups: round.taskGroups.map((tg) => ({
+        taskId: tg.taskId,
+        taskName: tg.taskName,
+        groups: tg.groups.map((group) => ({
+          flyingOrder: group.flyingOrder,
+          lonePilotFlagged: group.lonePilotFlagged,
+          members: group.members.map((m) => ({ rosterEntryId: m.rosterEntryId, lane: m.lane })),
+        })),
+      })),
     })),
     distribution: {
       maxMeets: draw.distribution.maxMeets,
@@ -252,5 +297,16 @@ export function generatedDrawToPayload(draw: GeneratedDraw): GeneratedDraw {
       pairs: draw.distribution.pairs.map((p) => ({ a: p.a, b: p.b, count: p.count })),
     },
     groupSizeWarnings: draw.groupSizeWarnings.map((w) => ({ ...w })),
+    taskDistributions: draw.taskDistributions.map((td) => ({
+      taskId: td.taskId,
+      taskName: td.taskName,
+      metricValue: td.metricValue,
+      distribution: {
+        maxMeets: td.distribution.maxMeets,
+        totalExcessMeets: td.distribution.totalExcessMeets,
+        variance: td.distribution.variance,
+        pairs: td.distribution.pairs.map((p) => ({ a: p.a, b: p.b, count: p.count })),
+      },
+    })),
   };
 }

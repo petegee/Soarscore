@@ -126,6 +126,18 @@ export class DrawProjection {
           lonePilotFlagged: group.lonePilotFlagged,
           members: group.members.map((m) => ({ rosterEntryId: m.rosterEntryId, lane: m.lane })),
         })),
+        // Older stored draw.generated payloads (pre-STORY-001-020) predate
+        // this field entirely — default to [] on replay rather than throw
+        // (D4).
+        taskGroups: (round.taskGroups ?? []).map((tg) => ({
+          taskId: tg.taskId,
+          taskName: tg.taskName,
+          groups: tg.groups.map((g) => ({
+            flyingOrder: g.flyingOrder,
+            lonePilotFlagged: g.lonePilotFlagged,
+            members: g.members.map((m) => ({ rosterEntryId: m.rosterEntryId, lane: m.lane })),
+          })),
+        })),
       })),
       distribution: {
         maxMeets: draw.distribution.maxMeets,
@@ -136,6 +148,19 @@ export class DrawProjection {
       // Older stored draw.generated payloads (pre-STORY-001-022) predate this
       // field entirely — default to [] on replay rather than throw (D4).
       groupSizeWarnings: (draw.groupSizeWarnings ?? []).map((w) => ({ ...w })),
+      // Older stored draw.generated payloads (pre-STORY-001-020) predate this
+      // field entirely — default to [] on replay rather than throw (D4).
+      taskDistributions: (draw.taskDistributions ?? []).map((td) => ({
+        taskId: td.taskId,
+        taskName: td.taskName,
+        metricValue: td.metricValue,
+        distribution: {
+          maxMeets: td.distribution.maxMeets,
+          totalExcessMeets: td.distribution.totalExcessMeets,
+          variance: td.distribution.variance,
+          pairs: td.distribution.pairs.map((p) => ({ a: p.a, b: p.b, count: p.count })),
+        },
+      })),
     };
   }
 }

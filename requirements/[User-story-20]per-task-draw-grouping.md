@@ -191,13 +191,25 @@ resolved independently of the other two tasks' compositions.
 **Given** an F3B roster of 6 pilots and a draw specification requesting 2
 groups per round
 **When** the Organiser generates the round
-**Then** Duration and Distance generate normally (their minimums of 5 and 3
-are unaffected), Speed generates the closest compliant grouping available (a
+**Then** Distance generates normally (its minimum of 3 is exactly met by
+floor(6/2) = 3), Speed generates the closest compliant grouping available (a
 single group of all 6, since neither "≥ 8" nor a 2-group split of 6 is
-possible) *and* is flagged with a warning naming Speed and citing that this
-roster cannot meet F3B.1.8b's minimum-8 requirement even under the "or all
-competitors" escape, per STORY-001-022's warn-and-override policy — the round
-is still generated, not rejected outright.
+possible) via its "or all competitors" escape, and — per D14 (STORY-001-022) —
+raises **no warning**, because that escape is itself a rule-compliant
+satisfaction of F3B.1.8b, not a fallback of last resort. Duration, which
+carries no such escape and whose minimum of 5 is *not* met by floor(6/2) = 3,
+bottoms out at its own requested 2 groups and *is* flagged with a
+task-qualified warning naming Duration and citing F3B.1.8b — the round is
+still generated, not rejected outright.
+
+Note (2026-07-13): the original wording of this AC named Speed as the
+warning-raising task and expected a warning even when its "or all competitors"
+escape resolved the shortfall. That contradicts D14's already-shipped
+semantics (STORY-001-022): when the escape resolves a task to a single
+whole-roster group, that is treated as fully rule-compliant, not a warn-worthy
+fallback. This AC has been corrected to match D14 as-built and to use the
+task (Duration) that genuinely falls short at this roster/group-count
+combination. See `docs/requirements/decisions.md` D14.
 
 #### AC5: Single-task classes are unaffected
 **Given** an F5J competition (a single-task class) with a saved draw

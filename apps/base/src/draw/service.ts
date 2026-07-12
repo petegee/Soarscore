@@ -19,6 +19,9 @@ import {
   type MeetCount,
   modelAllowsAllCompetitorsFallback,
   type RoundDraw,
+  type TaskGroupSet,
+  type TaskMatchupDistribution,
+  type TaskParameterSet,
 } from "@soarscore/shared";
 import type { EventStore } from "../eventstore/event-store.js";
 import type { CompetitionProjection } from "../competitions/projection.js";
@@ -178,72 +181,102 @@ export class DrawService {
     const roster = this.rosterProjection.getRoster(competitionId);
     const seatIds = roster.map((entry) => entry.id);
     const R = seatIds.length;
-    const resolvedMin = this.resolveMin(model);
 
     // Re-check the D1 bound against the *current* roster: it may have shrunk
     // since the spec was saved (Safeguard 6). Also rejects an empty roster
     // (R < 2). The rule-fixed minimum is no longer a hard rejection here
-    // (D14) — see resolveGroupPlan below. singleGroupPermitted mirrors
-    // assertGroupBound's own gate exactly, and is reused below so the fallback
-    // search can never land on a single group the CD hasn't consented to
-    // (bug fix: previously the fallback could collapse to G=1 without
-    // re-checking this gate, silently defeating the D1 spare-scorer consent
-    // requirement — see resolveGroupPlan's comment).
-    const singleGroupPermitted = spec.allowSingleGroup || modelAllowsAllCompetitorsFallback(model);
+    // (D14) — each task's own minimum is resolved independently below
+    // (STORY-001-020). assertGroupBound remains a single whole-spec gate on
+    // spec.groupsPerRound itself — it never varies per task.
     this.assertGroupBound(R, spec.groupsPerRound, spec.allowSingleGroup, modelAllowsAllCompetitorsFallback(model));
-
-    // The "closest available grouping" fallback (STORY-001-022): generate with
-    // the requested groupsPerRound whenever it already clears the resolved
-    // rule-fixed minimum; otherwise search for the largest group count that
-    // does. See resolveGroupPlan for the single-group consent rule.
-    const { effectiveG, warning: groupSizeWarning } = this.resolveGroupPlan(
-      model,
-      R,
-      spec.groupsPerRound,
-      resolvedMin,
-      singleGroupPermitted,
-    );
 
     const contestNumbers = new Map<string, number | null>(
       roster.map((entry) => [entry.id, entry.pilotNumber]),
     );
 
-    // Run the attempts; keep the fairest valid one by the chosen metric.
-    let bestPlacement: string[][][] | null = null;
-    let bestDistribution: MatchupDistribution | null = null;
-    let bestKey: number[] | null = null;
-    for (let i = 0; i < ATTEMPTS; i++) {
-      const placement = this.runAttempt(seatIds, spec, effectiveG);
-      if (!placement) continue;
-      const distribution = this.computeDistribution(placement, seatIds);
-      const key = scoreKey(distribution, spec.fairnessMetric);
-      if (bestKey === null || keyLess(key, bestKey)) {
-        bestPlacement = placement;
-        bestDistribution = distribution;
-        bestKey = key;
-      }
-    }
-
-    if (!bestPlacement || !bestDistribution) {
-      // AC6: no attempt yielded a valid draw (e.g. the no-back-to-back rule is
-      // unsatisfiable for this roster/spec). Nothing is appended (Safeguard 3).
-      // Orthogonal to the group-size fallback above, which only picks the G to
-      // attempt with — it never guarantees an attempt succeeds.
-      throw new DrawGenerationFailedError(
-        `Could not generate a valid draw after ${ATTEMPTS} attempts — the constraints may be unsatisfiable for this roster and specification`,
+    // Per-task generation (STORY-001-020): each of the class model's tasks
+    // (F3B: Duration/Distance/Speed; every other class: exactly one) resolves
+    // its own rule-fixed minimum and runs its own independent
+    // ATTEMPTS-budget attempt/refine/score search — runAttempt already builds
+    // a fresh meet map per call, so calling it once per task, unchanged,
+    // already isolates each task's anti-repeat accounting from every other
+    // task's. A single-task class's model.tasks has length 1, so this loop
+    // runs exactly once — the identical code path as today (AC5, NFR-2), with
+    // no discipline branch anywhere.
+    const perTask = model.tasks.map((task) => {
+      const { effectiveG, warning } = this.resolveGroupPlanForTask(
+        model,
+        task,
+        R,
+        spec.groupsPerRound,
+        spec.allowSingleGroup,
       );
-    }
+
+      let bestPlacement: string[][][] | null = null;
+      let bestDistribution: MatchupDistribution | null = null;
+      let bestKey: number[] | null = null;
+      for (let i = 0; i < ATTEMPTS; i++) {
+        const placement = this.runAttempt(seatIds, spec, effectiveG);
+        if (!placement) continue;
+        const distribution = this.computeDistribution(placement, seatIds);
+        const key = scoreKey(distribution, spec.fairnessMetric);
+        if (bestKey === null || keyLess(key, bestKey)) {
+          bestPlacement = placement;
+          bestDistribution = distribution;
+          bestKey = key;
+        }
+      }
+
+      if (!bestPlacement || !bestDistribution) {
+        // AC6: no attempt yielded a valid draw for this task (e.g. the
+        // no-back-to-back rule is unsatisfiable for its grouping alone, even
+        // if other tasks succeed). Nothing is appended (Safeguard 3). Name
+        // the task so the failure is traceable to which one dead-ended.
+        throw new DrawGenerationFailedError(
+          `Could not generate a valid draw for ${task.name} after ${ATTEMPTS} attempts — the constraints may be unsatisfiable for this roster and specification`,
+        );
+      }
+
+      return { task, placement: bestPlacement, distribution: bestDistribution, warning };
+    });
+
+    const taskGroups: TaskGroupSet[][] = perTask.map(({ task, placement }) =>
+      placement.map((_roundPlacement, roundIdx) => ({
+        taskId: task.id,
+        taskName: task.name,
+        groups: this.materialiseOneTasksGroups(placement, roundIdx, spec.lanePolicy, contestNumbers),
+      })),
+    );
+    // taskGroups is task-major (one array per task, each with one entry per
+    // round); transpose to round-major for RoundDraw[] below.
+    const roundCount = perTask[0]?.placement.length ?? 0;
+    const rounds: RoundDraw[] = Array.from({ length: roundCount }, (_, roundIdx) => {
+      const roundTaskGroups = taskGroups.map((taskRounds) => taskRounds[roundIdx]!);
+      return {
+        roundNumber: roundIdx + 1,
+        groups: roundTaskGroups[0]!.groups,
+        taskGroups: roundTaskGroups,
+      };
+    });
+
+    const taskDistributions: TaskMatchupDistribution[] = perTask.map(({ task, distribution }) => ({
+      taskId: task.id,
+      taskName: task.name,
+      distribution,
+      metricValue: metricValueOf(distribution, spec.fairnessMetric),
+    }));
 
     const draw: GeneratedDraw = {
       id: crypto.randomUUID(),
       competitionId,
       specId: spec.id,
-      rounds: this.materialise(bestPlacement, spec.lanePolicy, contestNumbers),
+      rounds,
       metric: spec.fairnessMetric,
-      metricValue: metricValueOf(bestDistribution, spec.fairnessMetric),
-      distribution: bestDistribution,
+      metricValue: taskDistributions[0]!.metricValue,
+      distribution: taskDistributions[0]!.distribution,
       attemptsRun: ATTEMPTS,
-      groupSizeWarnings: groupSizeWarning ? [groupSizeWarning] : [],
+      groupSizeWarnings: perTask.map((p) => p.warning).filter((w): w is ConstraintWarning => w !== null),
+      taskDistributions,
     };
 
     const record = this.eventStore.append({
@@ -426,68 +459,86 @@ export class DrawService {
     }
   }
 
-  // STORY-001-022: the "closest available grouping" fallback, merged with its
-  // warning derivation (item 6 of the follow-up review — the two used to be
-  // separate functions that each re-derived floor(R/g) >= resolvedMin and
-  // handed 4-5 parameters back and forth between them; one function keeps the
-  // search and its outcome's warning consistent by construction).
+  // STORY-001-020: the task-scoped analogue of the pre-story `resolveGroupPlan`
+  // — resolves one task's own minimum/escape instead of the whole model's
+  // Math.max reduction, so a task's own rule-fixed minimum governs only that
+  // task's own groups (AC2). The "closest available grouping" fallback logic
+  // itself is unchanged from STORY-001-022, just parameterised per task.
   //
   // Returns the requested groups-per-round unchanged whenever it already
-  // clears the resolved rule-fixed minimum (or there is no rule-fixed minimum
-  // at all); otherwise searches downward for the largest group count that
-  // does, never searching above the requested count — "closest" means fewer,
+  // clears this task's own resolved minimum (or the task has no minimum at
+  // all); otherwise searches downward for the largest group count that does,
+  // never searching above the requested count — "closest" means fewer,
   // larger groups, never more groups than the Organiser asked for.
   //
-  // Bug fix (code review): the search floor is 1 (a single whole-roster
-  // group) ONLY when `singleGroupPermitted` — i.e. the CD has already
-  // consented via allowSingleGroup, or the class model carries the "or all
-  // competitors" escape (modelAllowsAllCompetitorsFallback). Collapsing to a
-  // single group is exactly as consent-gated as an explicit
-  // groupsPerRound = 1 request would be (assertGroupBound's own gate); the
-  // fallback must never use the rule-fixed-minimum shortfall as a back door
-  // around that consent requirement. When single-group is NOT permitted, the
-  // search floor is 2: if nothing between the requested count and 2 clears
-  // the minimum, the fallback bottoms out at 2 groups and the warning simply
-  // reports the best it could do.
-  private resolveGroupPlan(
+  // The search floor is 1 (a single whole-roster group) ONLY when
+  // `allowSingleGroup` (the CD's spare-scorer consent) or this task's own
+  // `minGroupSizeAllCompetitorsFallback` escape applies — mirrors
+  // assertGroupBound's own single-group consent gate, now evaluated per task
+  // rather than via the whole-model `modelAllowsAllCompetitorsFallback`.
+  //
+  // Deviation from the Canvas's literal call-site pseudocode: that snippet
+  // shows `resolveGroupPlanForTask(task, R, requestedG, allowSingleGroup)`
+  // with no `model` parameter, but the same section's "Otherwise build the
+  // warning via computeGroupSizeMinimumWarningForTask" step requires `model`
+  // (for `model.name` and `groupSizeMinimumClauseFor(model)`). `model` is
+  // added here as a fifth parameter to resolve that internal inconsistency —
+  // the alternative (deriving the clause/name without the model) isn't
+  // possible, so this is the minimal fix.
+  private resolveGroupPlanForTask(
     model: ContestClassModel,
+    task: TaskParameterSet,
     R: number,
     requestedG: number,
-    resolvedMin: number,
-    singleGroupPermitted: boolean,
+    allowSingleGroup: boolean,
   ): { effectiveG: number; warning: ConstraintWarning | null } {
+    const resolvedMin = task.minGroupSize ?? 1;
     if (resolvedMin <= 1 || Math.floor(R / requestedG) >= resolvedMin) {
       return { effectiveG: requestedG, warning: null };
     }
-    const floorG = singleGroupPermitted ? 1 : 2;
+    const floorG = allowSingleGroup || task.minGroupSizeAllCompetitorsFallback ? 1 : 2;
     for (let g = requestedG - 1; g >= floorG; g--) {
       if (Math.floor(R / g) >= resolvedMin) return { effectiveG: g, warning: null };
     }
     const effectiveG = floorG;
-    // Bug fix (code review): a single group containing literally all
-    // competitors is always rule-compliant when the class carries the "or all
-    // competitors" escape (e.g. F3B.1.8b Task C), regardless of the numeric
-    // minimum — so no warning is raised for that case, even though the
-    // fallback only reached G=1 as a last resort.
-    if (effectiveG === 1 && modelAllowsAllCompetitorsFallback(model)) {
+    // A single group containing literally all competitors is always
+    // rule-compliant when this task carries the "or all competitors" escape
+    // (e.g. F3B.1.8b Task C: Speed), regardless of the numeric minimum — so
+    // no warning is raised for that case, even though the fallback only
+    // reached G=1 as a last resort. Evaluated per task (never via the
+    // whole-model modelAllowsAllCompetitorsFallback) so a task without the
+    // escape still warns even if a sibling task has it.
+    if (effectiveG === 1 && task.minGroupSizeAllCompetitorsFallback) {
       return { effectiveG, warning: null };
     }
-    const ruleClause = groupSizeMinimumClauseFor(model);
-    if (!ruleClause) return { effectiveG, warning: null }; // defensive: shouldn't occur since resolvedMin > 1 implies a clause
     return {
       effectiveG,
-      warning: {
-        // STORY-001-020 (per-task warnings, deferred) will let multiple
-        // group-size warnings co-occur on one candidate — at that point this
-        // literal id must become task-qualified (e.g. include the task or
-        // metric it came from) so accept()'s by-id acknowledgement filter
-        // still distinguishes them; today there is only ever this one.
-        id: "group-size-minimum",
-        constraint: "group-size-minimum",
-        message:
-          `${model.name}: ${ruleClause} requires at least ${resolvedMin} per group; a roster of ${R} ` +
-          `requesting ${requestedG} group(s) cannot meet it, so ${effectiveG} group(s) were generated instead`,
-      },
+      warning: this.computeGroupSizeMinimumWarningForTask(model, task, R, requestedG, effectiveG),
+    };
+  }
+
+  // STORY-001-020: build a task-qualified, individually-acknowledgeable
+  // warning when a task's own minimum cannot be met. The rule clause text
+  // itself doesn't differ by task (groupSizeMinimumClauseFor stays keyed on
+  // the class, since F3B.1.8b's clause is shared by all three tasks) — only
+  // the numeric minimum and the task name differ.
+  private computeGroupSizeMinimumWarningForTask(
+    model: ContestClassModel,
+    task: TaskParameterSet,
+    R: number,
+    requestedG: number,
+    effectiveG: number,
+  ): ConstraintWarning {
+    const ruleClause = groupSizeMinimumClauseFor(model) ?? "the class's group-size rule";
+    return {
+      // Task-qualified id (STORY-001-020): so AC4's Speed warning and any
+      // co-occurring Duration/Distance warning stay independently
+      // acknowledgeable via accept()'s existing by-id filter, unchanged.
+      id: `group-size-minimum:${task.id}`,
+      constraint: "group-size-minimum",
+      message:
+        `${model.name}: ${task.name} — ${ruleClause} requires at least ${task.minGroupSize} per group; ` +
+        `a roster of ${R} requesting ${requestedG} group(s) cannot meet it, so ${effectiveG} group(s) were generated instead`,
     };
   }
 
@@ -642,25 +693,29 @@ export class DrawService {
     }
   }
 
-  // Materialise seat placement into stored rounds: ordered groups with explicit
-  // per-slot lanes, keyed on rosterEntryId (RD4). A singleton group is flagged
-  // (AC5) — under the D1-bounded even split this cannot arise for a valid spec,
-  // so the flag is a safeguard the STORY-001-011 scoring guard relies on.
-  private materialise(
+  // Materialise one task's seat placement for one round: ordered groups with
+  // explicit per-slot lanes, keyed on rosterEntryId (RD4). A singleton group
+  // is flagged (AC5) — under the D1-bounded even split this cannot arise for
+  // a valid spec, so the flag is a safeguard the STORY-001-011 scoring guard
+  // relies on. STORY-001-020: narrowed from the pre-story `materialise` (which
+  // mapped every round of the whole placement at once) to one round of one
+  // task's own placement — the caller in `generate` loops rounds × tasks to
+  // assemble the final RoundDraw[]. The per-slot mapping logic itself
+  // (flyingOrder/lonePilotFlagged/assignLanes) is unchanged.
+  private materialiseOneTasksGroups(
     placement: string[][][],
+    roundIdx: number,
     policy: LaneAllocationPolicy,
     contestNumbers: Map<string, number | null>,
-  ): RoundDraw[] {
-    return placement.map((groups, roundIdx) => ({
-      roundNumber: roundIdx + 1,
-      groups: groups.map(
-        (seatIds, groupIdx): FlightGroup => ({
-          flyingOrder: groupIdx + 1,
-          lonePilotFlagged: seatIds.length === 1,
-          members: assignLanes(seatIds, roundIdx + 1, policy, contestNumbers),
-        }),
-      ),
-    }));
+  ): FlightGroup[] {
+    const groups = placement[roundIdx]!;
+    return groups.map(
+      (seatIds, groupIdx): FlightGroup => ({
+        flyingOrder: groupIdx + 1,
+        lonePilotFlagged: seatIds.length === 1,
+        members: assignLanes(seatIds, roundIdx + 1, policy, contestNumbers),
+      }),
+    );
   }
 
   // The anti-repeat evidence over the whole draw (AC4). Counts every pairing
