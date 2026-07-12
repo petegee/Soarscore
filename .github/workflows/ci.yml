@@ -20,16 +20,5 @@ jobs:
       # `build` runs tsc per workspace, so it doubles as the typecheck.
       - run: npm run build
 
-  deploy-demo:
-    needs: build-test
-    # Only deploy the demo on a push to the tracked branch, never on PRs.
-    # Keep this branch in sync with `branch:` in render.yaml.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger Render deploy
-        # Render builds the Docker image from the repo on its side; this only
-        # kicks it off once CI is green. Store the hook URL as a repo secret.
-        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
-        env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+  # Deployment is handled by Render: the Soarscore_Preview service auto-deploys
+  # from the Dockerfile on every push to master, so no deploy job lives here.

@@ -42,6 +42,11 @@ lone pilot would otherwise bank an automatic 1000.
 - Draw specification: draw mode (random initial order + anti-repeat intent),
   groups-per-round within roster/task bounds, consecutive-flight constraint,
   lane-allocation policy.
+- The **spare-scorer override** (Area 4.1): an explicit flag recording that
+  spare non-flying scorers are present, relaxing the two-groups-per-round
+  floor so a single-group round may be specified. *(Added 2026-07-12: the
+  original implementation omitted this Area 4.1 relaxation — story re-opened
+  to include it; see AC7.)*
 - Generation for N rounds over multiple attempts, retaining the fairest by
   the matchup-distribution metric.
 - Fairness evidence review; lone-pilot-group avoidance; clear failure when no
@@ -98,6 +103,15 @@ scoring time.
 **When** the Organiser generates
 **Then** the system reports a clear failure with the reason, and no invalid
 draw is stored.
+
+#### AC7: Spare-scorer override relaxes the two-group floor *(added 2026-07-12)*
+**Given** a 14-pilot roster
+**When** the Organiser sets groups-per-round to 1 without the spare-scorer
+override
+**Then** the save is rejected with a message that cites the override as the
+way to permit it; **and when** the Organiser sets the override (spare
+non-flying scorers are present) and saves the same value
+**Then** the specification is accepted with the single-group round.
 
 ### INVEST Check
 

@@ -38,8 +38,9 @@ export interface DrawSpecification {
   drawMode: DrawMode;
   // 1 ≤ roundCount ≤ 8 (D7 cap). Validated structurally in Zod.
   roundCount: number;
-  // groupsPerRound ≥ 2 structurally; the roster-derived upper bound (≤ R/2, D1)
-  // is a cross-aggregate check in the service.
+  // groupsPerRound ≥ 2 structurally unless allowSingleGroup is set (then ≥ 1);
+  // the roster-derived upper bound (≤ R/2, D1) is a cross-aggregate check in
+  // the service.
   groupsPerRound: number;
   fairnessMetric: FairnessMetric;
   // Opt-in (Decision #5, default false): forbid a seat in the last group of a
@@ -47,8 +48,16 @@ export interface DrawSpecification {
   avoidConsecutiveFlights: boolean;
   lanePolicy: LaneAllocationPolicy;
   // Organiser override of the rule-derived per-group minimum; null → use the
-  // class model's task minGroupSize (the spare-timer exception, Decision #1).
+  // class model's task minGroupSize. Relaxes only the per-group minimum size —
+  // the D1 two-group floor is allowSingleGroup's concern, below.
   minGroupSizeOverride: number | null;
+  // The Area 4.1 spare-scorer override (Decision #1, amended 2026-07-12):
+  // records that spare non-flying scorers are present. Normally non-flying
+  // pilots score the flying group, which is why a round needs at least two
+  // groups; with this set the floor relaxes and groupsPerRound = 1 becomes
+  // saveable. All other bounds (per-group minimum, roster-derived maximum)
+  // still apply.
+  allowSingleGroup: boolean;
 }
 
 // One seat's membership of a flight group. Keys on rosterEntryId, never pilotId
@@ -113,40 +122,75 @@ export interface ConstraintWarning {
   message: string;
 }
 
-// The derived read-model over the retained outcome (4.3 consumes it later). The
-// candidate is null until the first successful generate.
+// The draw's acceptance state (STORY-001-017, AC2). Exactly three
+// distinguishable values:
+//  - no-draw:            no candidate has been generated (or it was cancelled).
+//  - awaiting-decision:  a candidate exists but the CD has not accepted it.
+//  - accepted:           a candidate has been committed as the authoritative
+//                        accepted draw.
+export type DrawAcceptanceStatus = "no-draw" | "awaiting-decision" | "accepted";
+
+// The derived read-model over the retained outcome. The candidate is null until
+// the first successful generate; accepted is null until the CD accepts (017);
+// status is the three-valued acceptance state derived in the service.
 export interface DrawEvidenceView {
   spec: DrawSpecification | null;
   candidate: GeneratedDraw | null;
+  accepted: GeneratedDraw | null;
+  status: DrawAcceptanceStatus;
   warnings: ConstraintWarning[];
 }
 
 // Structural validation only (Norm 2). Cross-aggregate rules — roster size, the
 // class model's minGroupSize, joint feasibility — live in DrawService, which
 // alone can see the sibling aggregates.
-export const saveDrawSpecRequestSchema = z.object({
-  drawMode: z.enum(["random-anti-repeat"]),
-  roundCount: z
-    .number()
-    .int("The round count must be a whole number")
-    .min(1, "A draw needs at least one round")
-    .max(8, "A draw covers up to 8 rounds per day (D7)"),
-  groupsPerRound: z
-    .number()
-    .int("Groups per round must be a whole number")
-    .min(2, "A round needs at least two groups"),
-  fairnessMetric: z.enum(["min-max-then-excess", "min-total-excess", "min-variance"]),
-  avoidConsecutiveFlights: z.boolean().default(false),
-  lanePolicy: z.enum(["rotate", "fixed-by-contest-number", "random"]),
-  minGroupSizeOverride: z
-    .number()
-    .int("The minimum group size must be a whole number")
-    .positive("The minimum group size must be greater than zero")
-    .nullable()
-    .default(null),
-});
+export const saveDrawSpecRequestSchema = z
+  .object({
+    drawMode: z.enum(["random-anti-repeat"]),
+    roundCount: z
+      .number()
+      .int("The round count must be a whole number")
+      .min(1, "A draw needs at least one round")
+      .max(8, "A draw covers up to 8 rounds per day (D7)"),
+    groupsPerRound: z
+      .number()
+      .int("Groups per round must be a whole number")
+      .min(1, "A round needs at least one group"),
+    fairnessMetric: z.enum(["min-max-then-excess", "min-total-excess", "min-variance"]),
+    avoidConsecutiveFlights: z.boolean().default(false),
+    lanePolicy: z.enum(["rotate", "fixed-by-contest-number", "random"]),
+    minGroupSizeOverride: z
+      .number()
+      .int("The minimum group size must be a whole number")
+      .positive("The minimum group size must be greater than zero")
+      .nullable()
+      .default(null),
+    // The Area 4.1 spare-scorer override (amended 2026-07-12): records that
+    // spare non-flying scorers are present — D1's rationale for the two-group
+    // floor — permitting groupsPerRound = 1 via the refine below.
+    allowSingleGroup: z.boolean().default(false),
+  })
+  // Cross-field floor (AC7): both fields live in this request, so per the
+  // validation split (Norm 2) the two-group floor is structural. The rejection
+  // must cite the override as the way to permit a single group; it surfaces as
+  // VALIDATION_FAILED (400) via parseOrThrow — never as
+  // DRAW_GROUP_SIZE_OUT_OF_BOUNDS, which stays reserved for roster-derived
+  // bounds.
+  .refine((spec) => !(spec.groupsPerRound === 1 && spec.allowSingleGroup !== true), {
+    path: ["groupsPerRound"],
+    message: "A round needs at least two groups unless the spare-scorer override is set",
+  });
 
 export type SaveDrawSpecRequest = z.infer<typeof saveDrawSpecRequestSchema>;
+
+// A CD decision (accept or cancel) references the awaiting-decision candidate
+// by id (AC6): the same schema serves both routes, and a stale id is rejected
+// in the service so a decision can never attach to a superseded candidate.
+export const drawDecisionRequestSchema = z.object({
+  drawId: z.string().min(1, "A draw id is required to accept or cancel"),
+});
+
+export type DrawDecisionRequest = z.infer<typeof drawDecisionRequestSchema>;
 
 // Deep-copy the spec for an event payload so no appended payload aliases caller
 // state (mirrors taskConfigToPayload).
@@ -162,6 +206,7 @@ export function drawSpecToPayload(spec: DrawSpecification): DrawSpecification {
     avoidConsecutiveFlights: spec.avoidConsecutiveFlights,
     lanePolicy: spec.lanePolicy,
     minGroupSizeOverride: spec.minGroupSizeOverride,
+    allowSingleGroup: spec.allowSingleGroup,
   };
 }
 

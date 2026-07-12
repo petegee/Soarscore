@@ -37,3 +37,24 @@ export class DrawGenerationFailedError extends DomainError {
     super(message);
   }
 }
+
+// STORY-001-017 AC5 (and its cancel symmetric): there is no awaiting-decision
+// candidate to accept or cancel. Nothing is appended before this is thrown.
+// 409 — the request conflicts with the contest's current draw state.
+export class DrawCandidateNotFoundError extends DomainError {
+  readonly code = "DRAW_CANDIDATE_NOT_FOUND";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+// STORY-001-017 AC6: the supplied drawId no longer matches the current
+// candidate — a re-generate superseded it. Rejecting keeps the "decision binds
+// to a specific candidate" invariant: no stale accept/cancel can attach to the
+// wrong draw. The client should re-read the evidence and decide again. 409.
+export class DrawCandidateSupersededError extends DomainError {
+  readonly code = "DRAW_CANDIDATE_SUPERSEDED";
+  constructor(message: string) {
+    super(message);
+  }
+}

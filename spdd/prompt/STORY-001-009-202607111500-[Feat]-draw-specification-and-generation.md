@@ -10,8 +10,14 @@ house rule 1).
 
 - **Specify** a validated draw policy (draw mode, round count N, groups-per-round,
   fairness metric, consecutive-flight toggle, lane-allocation policy, optional
-  min-group-size override) as a per-competition aggregate under
-  `scope = competitionId`.
+  min-group-size override, spare-scorer override) as a per-competition aggregate
+  under `scope = competitionId`.
+- **Spare-scorer override** (Area 4.1, AC7 — *amended 2026-07-12*): an explicit
+  boolean recording that spare non-flying scorers are present. Normally
+  non-flying pilots score the flying group (decisions.md D1), which is why a
+  round needs at least two groups; when the override is set that floor relaxes
+  and `groupsPerRound: 1` becomes saveable. All other bounds (per-task class
+  minimum group size, roster-derived maximum) still apply.
 - **Generate** the fairest of *K* randomised attempts, persisting the fully
   **materialised outcome** as a `draw.generated` event so event-log replay
   reproduces the identical draw with **no RNG in the projection** (D4 determinism).
@@ -42,6 +48,7 @@ class DrawSpecification {
   +boolean avoidConsecutiveFlights
   +LaneAllocationPolicy lanePolicy
   +number|null minGroupSizeOverride
+  +boolean allowSingleGroup
 }
 
 class GeneratedDraw {
@@ -96,6 +103,7 @@ class SaveDrawSpecRequest {
   +boolean avoidConsecutiveFlights
   +LaneAllocationPolicy lanePolicy
   +number|null minGroupSizeOverride
+  +boolean allowSingleGroup
 }
 
 class DrawEvidenceView {
@@ -106,7 +114,7 @@ class DrawEvidenceView {
 
 DrawSpecification "1" -- "1" GeneratedDraw : generates >
 GeneratedDraw "1" -- "1..8" RoundDraw : contains
-RoundDraw "1" -- "2..*" FlightGroup : ordered groups
+RoundDraw "1" -- "1..*" FlightGroup : ordered groups
 FlightGroup "1" -- "1..*" GroupMembership : ordered members
 GroupMembership --> RosterEntry : seat-keyed (rosterEntryId, RD4)
 GeneratedDraw --> MatchupDistribution : evidence
@@ -131,7 +139,10 @@ on `TaskParameterSet` (NFR-2), seeded from the rule docs and threaded through
 `stockTask`, `copyTaskParameterSet`, `deriveDeviations`, and `updateTaskSchema`.
 Membership keys on `rosterEntryId` (never `pilotId`) so a post-draw replacement
 inherits its slots (RD4). Groups are stored **ordered** regardless of the
-consecutive-flight toggle (Decision #5).
+consecutive-flight toggle (Decision #5). `allowSingleGroup` (*amended
+2026-07-12*) is an **additive optional** boolean, default `false`, on both
+`DrawSpecification` and `SaveDrawSpecRequest`, persisted in the
+`draw.specSaved` payload like every other spec field — no aggregate reshape.
 
 ## Approach
 
@@ -161,12 +172,24 @@ consecutive-flight toggle (Decision #5).
 
 3. **Validation split (mirrors `CompetitionTaskConfigService`)**
    - **Structural** checks (types, enums, `1 ≤ roundCount ≤ 8`,
-     `groupsPerRound ≥ 2`, non-negative override) live in the **Zod schema**.
+     `groupsPerRound ≥ 1`, non-negative override) live in the **Zod schema**.
+   - **Spare-scorer floor (AC7, *amended 2026-07-12*)**: the two-group floor is
+     a **cross-field Zod refine**, not a service check — both fields
+     (`groupsPerRound`, `allowSingleGroup`) are in the same request, so per the
+     validation split it is structural. `groupsPerRound === 1` with
+     `allowSingleGroup !== true` fails the refine, surfacing through
+     `parseOrThrow` as `ValidationError` → **`VALIDATION_FAILED` (HTTP 400)**
+     with a field error on `groupsPerRound` whose message is exactly
+     "A round needs at least two groups unless the spare-scorer override is
+     set". This is the shape STORY-001-019's UI branches on — **not**
+     `DRAW_GROUP_SIZE_OUT_OF_BOUNDS`, which stays reserved for roster-derived
+     bounds.
    - **Cross-aggregate** checks (Zod cannot see roster size or the class model)
      live in the **service**: AC1 group-size bound (min from
      `TaskParameterSet.minGroupSize` or the spec override; max = `roster/2`,
-     D1-derived) and AC2 joint-feasibility warnings. Re-check at **generate**
-     time too, since a roster can shrink after a spec was saved.
+     D1-derived; **lower bound of groups = 1 when `allowSingleGroup`, else 2**)
+     and AC2 joint-feasibility warnings. Re-check at **generate** time too,
+     since a roster can shrink after a spec was saved.
 
 4. **Generation algorithm (service/command path only)**
    - Read live roster + saved spec + bounds → run *K* randomised attempts of
@@ -262,13 +285,26 @@ consecutive-flight toggle (Decision #5).
 4. `saveDrawSpecRequestSchema`:
    - `drawMode`: `z.enum(["random-anti-repeat"])`.
    - `roundCount`: `z.number().int().min(1).max(8, "…up to 8 rounds per day (D7)")`.
-   - `groupsPerRound`: `z.number().int().min(2, "A round needs at least two groups")`.
+   - `groupsPerRound`: `z.number().int().min(1)` (*amended 2026-07-12*: the hard
+     `.min(2)` relaxes to `.min(1)`; the two-group floor moves to the cross-field
+     refine below).
    - `fairnessMetric`: `z.enum([...])`.
    - `avoidConsecutiveFlights`: `z.boolean().default(false)` (Decision #5).
    - `lanePolicy`: `z.enum([...])`.
    - `minGroupSizeOverride`: `z.number().int().positive().nullable().default(null)`.
+   - `allowSingleGroup`: `z.boolean().default(false)` (*amended 2026-07-12*) —
+     the Area 4.1 spare-scorer override: records that spare non-flying scorers
+     are present (D1's rationale for the two-group floor).
+   - **Cross-field refine** (*amended 2026-07-12*): reject
+     `groupsPerRound === 1 && allowSingleGroup !== true` with the field path
+     `["groupsPerRound"]` and the exact message "A round needs at least two
+     groups unless the spare-scorer override is set" (the rejection must cite
+     the override as the way to permit a single group — AC7). Surfaces as
+     `VALIDATION_FAILED` (400) via `parseOrThrow`.
 5. `drawSpecToPayload(spec)` / `generatedDrawToPayload(draw)`: deep-copy nested
    arrays so no appended payload aliases caller state (mirror `taskConfigToPayload`).
+   `drawSpecToPayload` copies `allowSingleGroup` like every other spec field, so
+   the flag persists in the `draw.specSaved` payload (AC7).
 
 ### Update events — `packages/shared/src/events.ts`
 1. `export type DrawEventType = "draw.specSaved" | "draw.generated";`
@@ -294,7 +330,9 @@ consecutive-flight toggle (Decision #5).
 2. `DrawSpecNotFoundError` (`DRAW_SPEC_NOT_FOUND`, 404).
 3. `GroupSizeOutOfBoundsError` (`DRAW_GROUP_SIZE_OUT_OF_BOUNDS`, 409) — AC1;
    message states the bound (min from task/override, max = roster/2) and the
-   implied groups-per-round range.
+   implied groups-per-round range, whose lower end is 1 when the spec's
+   `allowSingleGroup` is set, else 2. The AC7 groupsPerRound=1-without-flag
+   rejection is **not** this error — it is the Zod refine's `VALIDATION_FAILED`.
 4. `DrawGenerationFailedError` (`DRAW_GENERATION_FAILED`, 422) — AC6; carries a
    human reason; **nothing is appended** before it is thrown.
 5. Each new class gets a `setErrorHandler` branch in `app.ts`.
@@ -310,14 +348,22 @@ consecutive-flight toggle (Decision #5).
    - Resolve competition + model + **live roster size** `R`.
    - Compute `minGroupSize = spec.minGroupSizeOverride ?? max(task.minGroupSize)`
      across the model's tasks (null → 1).
-   - **AC1 hard bound**: derive feasible groups-per-round range
-     `[ceil(R / floor(R/2)) … floor(R / minGroupSize)]`; if `groupsPerRound`
-     forces any group `< minGroupSize`, or `groupsPerRound < 2`
-     (`> R/2` per D1), throw `GroupSizeOutOfBoundsError` explaining the bound.
+   - **AC1 hard bound**: derive the feasible groups-per-round range
+     `[lower … min(floor(R / minGroupSize), floor(R / 2))]` where **`lower = 1`
+     when `spec.allowSingleGroup`, else `2`** (*amended 2026-07-12* — the
+     spare-scorer override relaxes only the D1 floor; the per-group minimum and
+     the `R/2` ceiling are unchanged and still apply). If `groupsPerRound` falls
+     outside the range, throw `GroupSizeOutOfBoundsError` explaining the bound
+     (the message quotes the range with the flag-adjusted lower end).
+     `assertGroupBound` therefore takes `allowSingleGroup` as an input. Note
+     `groupsPerRound === 1` without the flag never reaches this check — the Zod
+     cross-field refine rejects it first with `VALIDATION_FAILED`.
    - **AC2 soft warnings**: build `ConstraintWarning[]` for constraints that
      cannot be *jointly* satisfied (e.g. anti-repeat infeasible for
      `roundCount` × `groupsPerRound`; consecutive-flight unsatisfiable with only
-     2 groups). Return them; do **not** block the save.
+     2 groups — and strictly unsatisfiable with a single group over ≥ 2 rounds,
+     since the round's only group is both last and first). Return them; do
+     **not** block the save.
    - Append `draw.specSaved`; `projection.apply(record)`; return the saved spec.
 4. `generate(competitionId, attribution): GeneratedDraw`
    - Load saved spec (404 if none), model, and the live roster (seat ids).
@@ -375,6 +421,14 @@ consecutive-flight toggle (Decision #5).
    (assert event count unchanged).
 7. **Determinism**: generate → `readAll()` → fresh projection `rebuild` →
    candidate is byte-identical (no re-randomisation on replay).
+8. AC7 (*amended 2026-07-12*): `groupsPerRound: 1` **without**
+   `allowSingleGroup` → rejected 400 `VALIDATION_FAILED` with a
+   `groupsPerRound` field error whose message cites the override ("A round
+   needs at least two groups unless the spare-scorer override is set"); the
+   same save **with** `allowSingleGroup: true` → accepted; the flag persists
+   through the `draw.specSaved` event (fresh projection rebuild) and shows in
+   the `DrawEvidenceView.spec`. All other bounds still apply with the flag set
+   (e.g. a `groupsPerRound` above `floor(R/minGroupSize)` is still 409).
 
 ## Norms
 
@@ -408,10 +462,13 @@ consecutive-flight toggle (Decision #5).
 
 ## Safeguards
 
-1. **Functional**: `1 ≤ roundCount ≤ 8` (D7); `groupsPerRound ≥ 2` and
-   `≤ R/2` (D1); every group `≥ minGroupSize` (task/override) unless a singleton
-   is arithmetically unavoidable, in which case it is stored and
-   `lonePilotFlagged`. AC1 rejects; AC2 warns; AC6 fails — three distinct paths.
+1. **Functional**: `1 ≤ roundCount ≤ 8` (D7); `groupsPerRound ≥ 2` — relaxed to
+   `≥ 1` **only** when `allowSingleGroup` is set (Area 4.1 spare-scorer
+   override, *amended 2026-07-12*; a bare `groupsPerRound: 1` is rejected with
+   a message that cites the override) — and `≤ R/2` (D1); every group
+   `≥ minGroupSize` (task/override) unless a singleton is arithmetically
+   unavoidable, in which case it is stored and `lonePilotFlagged`. AC1 rejects;
+   AC2 warns; AC6 fails — three distinct paths.
 2. **Determinism (critical)**: a projection rebuild from the log MUST reproduce
    the identical candidate. No RNG, seed-recompute, or re-generation in
    `apply`/`rebuild`. Enforced by the rebuild-equivalence test.
@@ -438,3 +495,17 @@ consecutive-flight toggle (Decision #5).
    consecutive-flight toggle, anchoring STORY-001-010 (lanes) and -011 (groups).
 10. **Scope discipline**: no accept/re-draw (4.3), no manual lane reassignment
     (010), no dummy insertion (011/5.3), no frequency/team logic. Candidate-only.
+
+## Changelog
+
+- **2026-07-12** — Story re-opened (owner decision, option b): added the Area
+  4.1 **spare-scorer override** the original implementation omitted (story doc
+  Scope In + AC7). Additive `allowSingleGroup: boolean` (default `false`) on
+  `DrawSpecification` / `SaveDrawSpecRequest`, persisted in `draw.specSaved`;
+  Zod `groupsPerRound` `.min(2)` → `.min(1)` plus a cross-field refine —
+  `groupsPerRound === 1` requires `allowSingleGroup`, rejected as
+  `VALIDATION_FAILED` (400, field error on `groupsPerRound`, message "A round
+  needs at least two groups unless the spare-scorer override is set");
+  `assertGroupBound`'s lower bound becomes 1 when the flag is set; all other
+  bounds unchanged. New AC7 tests. Sections touched: Requirements, Entities,
+  Approach 3, Operations (shared types, errors, service, tests), Safeguards 1.

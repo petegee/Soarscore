@@ -16,6 +16,7 @@ import {
   DrawGenerationFailedError,
   DrawSpecNotFoundError,
   GroupSizeOutOfBoundsError,
+  ValidationError,
 } from "../src/draw/errors.js";
 
 const attribution = { actorName: "tester", originClient: "test-client", authority: "organiser" };
@@ -272,6 +273,89 @@ describe("DrawService", () => {
     expect(generatedEvents2).toBe(generatedEvents1 + 1); // log retains both
     expect(second.id).not.toBe(first.id);
     expect(drawProjection.getCandidate(comp.id)!.id).toBe(second.id); // latest wins
+  });
+
+  it("AC7: a single group without the spare-scorer override is rejected, citing the override", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F5L"));
+    seedRoster(comp.id, 6);
+    let caught: unknown;
+    try {
+      service.saveSpec(comp.id, specInput({ groupsPerRound: 1 }), attribution);
+    } catch (error) {
+      caught = error;
+    }
+    // The Zod cross-field refine, not the roster-derived 409: a field error on
+    // groupsPerRound naming the override as the way to permit a single group.
+    expect(caught).toBeInstanceOf(ValidationError);
+    const details = (caught as ValidationError).details as {
+      fieldErrors: Record<string, string[]>;
+    };
+    expect(details.fieldErrors.groupsPerRound).toContain(
+      "A round needs at least two groups unless the spare-scorer override is set",
+    );
+  });
+
+  it("AC7: with allowSingleGroup the save is accepted and the flag persists through rebuild", () => {
+    const { service, makeCompetition, seedRoster, eventStore } = build();
+    const comp = makeCompetition(stockModelIdFor("F5L"));
+    seedRoster(comp.id, 6);
+    const view = service.saveSpec(
+      comp.id,
+      specInput({ roundCount: 2, groupsPerRound: 1, allowSingleGroup: true }),
+      attribution,
+    );
+    expect(view.spec?.groupsPerRound).toBe(1);
+    expect(view.spec?.allowSingleGroup).toBe(true);
+    // The flag rides the draw.specSaved payload: a fresh projection rebuilt
+    // from the log carries it, and it shows in the evidence view's spec.
+    const fresh = new DrawProjection();
+    fresh.rebuild(eventStore.readAll());
+    expect(fresh.getSpec(comp.id)?.allowSingleGroup).toBe(true);
+    expect(service.getEvidence(comp.id).spec?.allowSingleGroup).toBe(true);
+  });
+
+  it("AC7: all other bounds still apply with the override set", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    // F3J fixes minGroupSize 6; a roster of 10 supports at most 1 group of ≥ 6,
+    // so groupsPerRound 2 is still out of bounds (409) even with the flag —
+    // the override relaxes only the two-group floor, not the per-group minimum
+    // or the roster-derived ceiling.
+    const comp = makeCompetition(stockModelIdFor("F3J"));
+    seedRoster(comp.id, 10);
+    expect(() =>
+      service.saveSpec(
+        comp.id,
+        specInput({ groupsPerRound: 2, allowSingleGroup: true }),
+        attribution,
+      ),
+    ).toThrow(GroupSizeOutOfBoundsError);
+    // ...while the single group those 10 pilots CAN sustain is now saveable.
+    const view = service.saveSpec(
+      comp.id,
+      specInput({ groupsPerRound: 1, allowSingleGroup: true }),
+      attribution,
+    );
+    expect(view.spec?.groupsPerRound).toBe(1);
+  });
+
+  it("AC7: single group + no-back-to-back over multiple rounds warns at save (AC2)", () => {
+    const { service, makeCompetition, seedRoster } = build();
+    const comp = makeCompetition(stockModelIdFor("F5L"));
+    seedRoster(comp.id, 6);
+    const view = service.saveSpec(
+      comp.id,
+      specInput({
+        roundCount: 3,
+        groupsPerRound: 1,
+        allowSingleGroup: true,
+        avoidConsecutiveFlights: true,
+      }),
+      attribution,
+    );
+    // Strictly unsatisfiable — the round's only group is both last and first —
+    // but a save constraint warning (AC2), never an error.
+    expect(view.warnings.map((w) => w.constraint)).toContain("avoid-consecutive-flights");
   });
 
   it("re-saving a spec keeps its id stable", () => {

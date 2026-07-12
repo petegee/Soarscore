@@ -25,6 +25,8 @@ import type { ClassModelProjection } from "../class-models/projection.js";
 import type { RosterProjection } from "../roster/projection.js";
 import type { DrawProjection } from "./projection.js";
 import {
+  DrawCandidateNotFoundError,
+  DrawCandidateSupersededError,
   DrawGenerationFailedError,
   DrawSpecNotFoundError,
   GroupSizeOutOfBoundsError,
@@ -46,18 +48,22 @@ export class DrawService {
     private readonly rosterProjection: RosterProjection,
   ) {}
 
-  // The evidence read-model (4.3 consumes it later): the saved spec, the current
-  // candidate (null until first generate), and the soft warnings recomputed
-  // against the live roster. 404 only if the competition itself is absent.
+  // The evidence read-model (4.3): the saved spec, the current candidate (null
+  // until first generate), the accepted draw (null until the CD accepts, 017),
+  // the three-valued acceptance status (AC2 — derived here so the projection
+  // stays a pure loader), and the soft warnings recomputed against the live
+  // roster. 404 only if the competition itself is absent.
   getEvidence(competitionId: string): DrawEvidenceView {
     const competition = this.getCompetition(competitionId);
     const model = this.getModel(competition);
     const spec = this.projection.getSpec(competitionId) ?? null;
     const candidate = this.projection.getCandidate(competitionId) ?? null;
+    const accepted = this.projection.getAccepted(competitionId) ?? null;
+    const status = accepted ? "accepted" : candidate ? "awaiting-decision" : "no-draw";
     const warnings = spec
       ? this.computeWarnings(spec, this.rosterSize(competitionId), this.resolveMin(model, spec.minGroupSizeOverride))
       : [];
-    return { spec, candidate, warnings };
+    return { spec, candidate, accepted, status, warnings };
   }
 
   // Save (or replace) the validated draw specification. AC1 rejects a
@@ -75,7 +81,7 @@ export class DrawService {
     // an empty/near-empty roster defers to generate (Safeguard 6) so the policy
     // can be authored before pilots are entered.
     if (R >= 2) {
-      this.assertGroupBound(R, parsed.groupsPerRound, resolvedMin);
+      this.assertGroupBound(R, parsed.groupsPerRound, resolvedMin, parsed.allowSingleGroup);
     }
 
     const existing = this.projection.getSpec(competitionId);
@@ -90,6 +96,7 @@ export class DrawService {
       avoidConsecutiveFlights: parsed.avoidConsecutiveFlights,
       lanePolicy: parsed.lanePolicy,
       minGroupSizeOverride: parsed.minGroupSizeOverride,
+      allowSingleGroup: parsed.allowSingleGroup,
     };
 
     const record = this.eventStore.append({
@@ -101,9 +108,13 @@ export class DrawService {
     this.projection.apply(record);
 
     const warnings = this.computeWarnings(spec, R, resolvedMin);
+    const candidate = this.projection.getCandidate(competitionId) ?? null;
+    const accepted = this.projection.getAccepted(competitionId) ?? null;
     return {
       spec: this.projection.getSpec(competitionId) ?? spec,
-      candidate: this.projection.getCandidate(competitionId) ?? null,
+      candidate,
+      accepted,
+      status: accepted ? "accepted" : candidate ? "awaiting-decision" : "no-draw",
       warnings,
     };
   }
@@ -128,7 +139,7 @@ export class DrawService {
 
     // Re-check the bound against the *current* roster: it may have shrunk since
     // the spec was saved (Safeguard 6). Also rejects an empty roster (R < 2).
-    this.assertGroupBound(R, spec.groupsPerRound, resolvedMin);
+    this.assertGroupBound(R, spec.groupsPerRound, resolvedMin, spec.allowSingleGroup);
 
     const contestNumbers = new Map<string, number | null>(
       roster.map((entry) => [entry.id, entry.pilotNumber]),
@@ -179,6 +190,67 @@ export class DrawService {
     return this.projection.getCandidate(competitionId) ?? draw;
   }
 
+  // Accept the awaiting-decision candidate as the contest's one authoritative
+  // accepted draw (STORY-001-017, AC1). The event carries only references —
+  // acceptance is a *promotion* of the stored draw.generated outcome, bound to
+  // a specific candidate id (AC6) so a stale decision can never attach to a
+  // superseded attempt. Accept is permitted whenever a candidate awaits a
+  // decision (cancel → generate → accept is a valid cycle); re-draw *after*
+  // acceptance is out of scope (Area 5.5). Attribution is the CD's (D1:
+  // recorded, not enforced).
+  accept(competitionId: string, drawId: string, attribution: Attribution): DrawEvidenceView {
+    this.getCompetition(competitionId);
+    const candidate = this.projection.getCandidate(competitionId);
+    if (!candidate) {
+      // AC5: nothing is appended.
+      throw new DrawCandidateNotFoundError(
+        `Competition ${competitionId} has no generated draw awaiting a decision; generate a draw first`,
+      );
+    }
+    if (candidate.id !== drawId) {
+      throw new DrawCandidateSupersededError(
+        "The referenced draw has been superseded by a newer generation; re-read the draw and decide again",
+      );
+    }
+
+    const record = this.eventStore.append({
+      scope: competitionId,
+      type: "draw.accepted",
+      payload: { competitionId, drawId: candidate.id, specId: candidate.specId },
+      attribution,
+    });
+    this.projection.apply(record);
+    return this.getEvidence(competitionId);
+  }
+
+  // Cancel (discard) the awaiting-decision candidate (STORY-001-017, AC4): the
+  // contest returns to a generatable no-draw state; the spec is retained.
+  // Rejections mirror accept — no candidate (nothing to cancel) and a stale id
+  // are both refused, and nothing is appended.
+  cancel(competitionId: string, drawId: string, attribution: Attribution): DrawEvidenceView {
+    this.getCompetition(competitionId);
+    const candidate = this.projection.getCandidate(competitionId);
+    if (!candidate) {
+      throw new DrawCandidateNotFoundError(
+        `Competition ${competitionId} has no generated draw awaiting a decision; there is nothing to cancel`,
+      );
+    }
+    if (candidate.id !== drawId) {
+      throw new DrawCandidateSupersededError(
+        "The referenced draw has been superseded by a newer generation; re-read the draw and decide again",
+      );
+    }
+
+    const record = this.eventStore.append({
+      scope: competitionId,
+      type: "draw.cancelled",
+      payload: { competitionId, drawId: candidate.id },
+      attribution,
+    });
+    this.projection.apply(record);
+    return this.getEvidence(competitionId);
+  }
+
   // ---- cross-aggregate resolution ---------------------------------------
 
   private getCompetition(competitionId: string): Competition {
@@ -203,10 +275,10 @@ export class DrawService {
     return this.rosterProjection.getRoster(competitionId).length;
   }
 
-  // The binding per-group minimum: the Organiser's override wins (the spare-timer
-  // exception, Decision #1); otherwise the largest of the model tasks' rule-fixed
-  // minima; null everywhere → 1 (no rule minimum, only the D1 two-per-group rule
-  // applies, folded into the bound below).
+  // The binding per-group minimum: the Organiser's override wins (it relaxes
+  // the per-group minimum size only); otherwise the largest of the model
+  // tasks' rule-fixed minima; null everywhere → 1 (no rule minimum, only the
+  // D1 two-per-group rule applies, folded into the bound below).
   private resolveMin(model: ContestClassModel, override: number | null): number {
     if (override !== null) return override;
     const mins = model.tasks
@@ -217,14 +289,25 @@ export class DrawService {
 
   // AC1: with G groups over R seats the smallest group is floor(R/G); require it
   // ≥ resolvedMin AND ≥ 2 (D1). Equivalently G ≤ floor(R/resolvedMin) and
-  // G ≤ floor(R/2). Reject outside [2, upper], explaining the bound.
-  private assertGroupBound(R: number, G: number, resolvedMin: number): void {
+  // G ≤ floor(R/2). Reject outside [lower, upper], explaining the bound. The
+  // lower end is 1 when the spare-scorer override is set, else 2 (Area 4.1,
+  // amended 2026-07-12): the override relaxes only the D1 floor — the per-group
+  // minimum and the R/2 ceiling still apply. A groupsPerRound of 1 without the
+  // flag never reaches here: the Zod cross-field refine rejects it first as
+  // VALIDATION_FAILED.
+  private assertGroupBound(
+    R: number,
+    G: number,
+    resolvedMin: number,
+    allowSingleGroup: boolean,
+  ): void {
+    const lower = allowSingleGroup ? 1 : 2;
     const maxByMin = Math.floor(R / resolvedMin);
     const maxByD1 = Math.floor(R / 2); // D1: every group needs ≥ 2 scoring pilots
     const upper = Math.min(maxByMin, maxByD1);
-    if (upper < 2 || G > upper) {
+    if (upper < lower || G > upper) {
       throw new GroupSizeOutOfBoundsError(
-        `Groups per round must be between 2 and ${Math.max(upper, 0)} for a roster of ${R} ` +
+        `Groups per round must be between ${lower} and ${Math.max(upper, 0)} for a roster of ${R} ` +
           `(each group needs at least ${resolvedMin} scoring pilot${resolvedMin === 1 ? "" : "s"} ` +
           `and at most ${maxByD1} group${maxByD1 === 1 ? "" : "s"} keep two per group); ` +
           `${G} would force groups below the minimum`,
@@ -257,6 +340,17 @@ export class DrawService {
         message:
           `Over ${spec.roundCount} rounds each pilot meets more opponents than the ${R - 1} available, ` +
           "so some pairings must repeat; the draw minimises repeats but cannot avoid them all",
+      });
+    }
+    // With a single group (spare-scorer override) the no-back-to-back rule is
+    // strictly unsatisfiable over ≥ 2 rounds: the round's only group is both
+    // last and first, so every seat flies back-to-back. Warn at save (AC2);
+    // generation would fail (AC6).
+    if (spec.avoidConsecutiveFlights && spec.groupsPerRound === 1 && spec.roundCount >= 2) {
+      warnings.push({
+        constraint: "avoid-consecutive-flights",
+        message:
+          "With a single group the no-back-to-back constraint cannot be satisfied over multiple rounds — the round's only group is both last and first",
       });
     }
     // With only two groups the no-back-to-back rule is very tight: a seat in the

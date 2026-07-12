@@ -1,12 +1,12 @@
-import type { DrawSpecification, GeneratedDraw } from "@soarscore/shared";
+import type { DrawAcceptedPayload, DrawSpecification, GeneratedDraw } from "@soarscore/shared";
 import type { EventRecord } from "../eventstore/event-store.js";
 
 // One projection for all competitions' draws — derived state only (D4/D7), safe
 // to discard and rebuild from the log at any time. draw.* events file under
 // scope = competitionId, so this projection guards by event type and files each
 // fact under its record's scope: one competition's draw never bleeds into
-// another's. A deleted competition drops both maps so nothing orphans (the
-// roster / task-config idiom).
+// another's. A deleted competition drops all three maps so nothing orphans
+// (the roster / task-config idiom).
 //
 // This is a PURE LOADER (Safeguard 2/Norm 5): it never invokes the randomiser
 // and never re-generates. The stored draw.generated payload is the fully
@@ -15,6 +15,7 @@ import type { EventRecord } from "../eventstore/event-store.js";
 export class DrawProjection {
   private specs = new Map<string, DrawSpecification>();
   private candidates = new Map<string, GeneratedDraw>();
+  private accepted = new Map<string, GeneratedDraw>();
 
   apply(record: EventRecord): void {
     switch (record.type) {
@@ -30,11 +31,33 @@ export class DrawProjection {
         this.candidates.set(record.scope, this.copyDraw(payload));
         break;
       }
+      case "draw.accepted": {
+        // Promotion of the already-stored outcome (STORY-001-017): the payload
+        // carries only references, so the accepted draw is the candidate the
+        // drawId names — a deep copy, no RNG, no re-materialisation (D4). The
+        // service guards candidate presence/id before appending, so replay of a
+        // well-formed log always finds it; a mismatch leaves accepted unset.
+        const payload = record.payload as DrawAcceptedPayload;
+        const candidate = this.candidates.get(record.scope);
+        if (candidate && candidate.id === payload.drawId) {
+          this.accepted.set(record.scope, this.copyDraw(candidate));
+        }
+        break;
+      }
+      case "draw.cancelled": {
+        // Discard the awaiting-decision candidate (AC4): the contest returns
+        // to no-draw/generatable. The spec is retained (re-generation is
+        // possible) and accepted is untouched — cancel targets an *unaccepted*
+        // candidate by AC4; cancelling an accepted draw is out of scope.
+        this.candidates.delete(record.scope);
+        break;
+      }
       case "competition.deleted": {
         if (record.scope !== "competitions") break;
         const payload = record.payload as { competitionId: string };
         this.specs.delete(payload.competitionId);
         this.candidates.delete(payload.competitionId);
+        this.accepted.delete(payload.competitionId);
         break;
       }
       default:
@@ -45,6 +68,7 @@ export class DrawProjection {
   rebuild(events: Iterable<EventRecord>): void {
     this.specs = new Map();
     this.candidates = new Map();
+    this.accepted = new Map();
     for (const event of events) {
       this.apply(event);
     }
@@ -60,6 +84,17 @@ export class DrawProjection {
     return draw ? this.copyDraw(draw) : undefined;
   }
 
+  getAccepted(competitionId: string): GeneratedDraw | undefined {
+    const draw = this.accepted.get(competitionId);
+    return draw ? this.copyDraw(draw) : undefined;
+  }
+
+  // The DrawStateProvider contract's question (STORY-001-005): "exists" means
+  // an *accepted* draw, never mere candidate existence.
+  hasAccepted(competitionId: string): boolean {
+    return this.accepted.has(competitionId);
+  }
+
   private copySpec(spec: DrawSpecification): DrawSpecification {
     return {
       id: spec.id,
@@ -72,6 +107,7 @@ export class DrawProjection {
       avoidConsecutiveFlights: spec.avoidConsecutiveFlights,
       lanePolicy: spec.lanePolicy,
       minGroupSizeOverride: spec.minGroupSizeOverride,
+      allowSingleGroup: spec.allowSingleGroup,
     };
   }
 

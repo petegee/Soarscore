@@ -35,7 +35,6 @@ import { TemplateService } from "./templates/service.js";
 import { TemplateNotFoundError } from "./templates/errors.js";
 import { RosterProjection } from "./roster/projection.js";
 import {
-  NoAcceptedDrawProvider,
   NoEntryScoresYetProvider,
   NothingRetiredProvider,
   type DrawStateProvider,
@@ -69,10 +68,13 @@ import { registerTaskConfigRoutes } from "./routes/task-config.js";
 import { DrawProjection } from "./draw/projection.js";
 import { DrawService } from "./draw/service.js";
 import {
+  DrawCandidateNotFoundError,
+  DrawCandidateSupersededError,
   DrawGenerationFailedError,
   DrawSpecNotFoundError,
   GroupSizeOutOfBoundsError,
 } from "./draw/errors.js";
+import { ProjectionDrawStateProvider } from "./draw/draw-state-provider.js";
 import { registerDrawRoutes } from "./routes/draw.js";
 import { registerHealthRoute } from "./routes/health.js";
 
@@ -90,8 +92,10 @@ export interface AppOptions {
   // Test seam: the scoring story will supply a real provider; production always
   // uses NoScoresYetProvider until captured scores exist.
   capturedScoresProvider?: CapturedScoresProvider;
-  // Test seam: STORY-001-009 will supply a real provider; production always
-  // uses NoAcceptedDrawProvider until draws exist.
+  // Override seam (tests can still inject NoAcceptedDrawProvider): production
+  // now defaults to the acceptance-backed ProjectionDrawStateProvider
+  // (STORY-001-017), which activates the STORY-001-005 remove/replace gates
+  // once a draw is accepted.
   drawStateProvider?: DrawStateProvider;
   // Test seam: Area 5.5 will supply a real provider; production always uses
   // NothingRetiredProvider until CD retirement exists.
@@ -171,7 +175,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
     rosterProjection,
     competitionProjection,
     projection,
-    options.drawStateProvider ?? new NoAcceptedDrawProvider(),
+    // Real provider (STORY-001-017): answers from the draw projection's
+    // *accepted* state — never mere candidate existence. Lives on the draw
+    // side and is injected here so the roster module never imports the draw
+    // module (no cycle). NoAcceptedDrawProvider remains the tests' seam.
+    options.drawStateProvider ?? new ProjectionDrawStateProvider(drawProjection),
     options.retirementStateProvider ?? new NothingRetiredProvider(),
     options.entryScoresProvider ?? new NoEntryScoresYetProvider(),
   );
@@ -186,8 +194,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
   );
 
   // Draw: specify a fair-draw policy, generate the fairest candidate over N
-  // rounds, and surface fairness evidence (STORY-001-009). Generate ≠ accept;
-  // the drawStateProvider default stays NoAcceptedDrawProvider (Decision #3).
+  // rounds, surface fairness evidence (STORY-001-009), and record the CD's
+  // accept/cancel decision (STORY-001-017). Generate ≠ accept; the
+  // drawStateProvider default is now the real ProjectionDrawStateProvider
+  // (017 supersedes 009 Decision #3's NoAcceptedDrawProvider default).
   const drawService = new DrawService(
     eventStore,
     drawProjection,
@@ -340,6 +350,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
     }
     if (error instanceof DrawGenerationFailedError) {
       reply.code(422).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof DrawCandidateNotFoundError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof DrawCandidateSupersededError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }
     if (error instanceof DomainError) {

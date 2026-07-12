@@ -4,10 +4,15 @@ import { apiRequest, ApiError } from "../api/client.js";
 import type { Actor } from "../identity/useActor.js";
 import { CompetitionForm, type CompetitionSubmitValues } from "./CompetitionForm.js";
 import { RosterView } from "../roster/RosterView.js";
+import { DrawSpecView } from "../draw/DrawSpecView.js";
+import { DrawView } from "../draw/DrawView.js";
 
 interface EditState {
   competition?: Competition;
 }
+
+// The competition-scoped sub-views hosted by the per-competition sub-nav.
+type OpenView = "roster" | "draw-spec" | "draw";
 
 export function CompetitionLibrary({ actor }: { actor: Actor }) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -18,8 +23,9 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
   const [editState, setEditState] = useState<EditState | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]> | undefined>();
   // "Open" competition is a client-side selection only — the base holds no
-  // open-competition session (D8).
-  const [openId, setOpenId] = useState<string | null>(null);
+  // open-competition session (D8). The selection carries which competition-
+  // scoped sub-view is showing (roster / draw spec).
+  const [open, setOpen] = useState<{ id: string; view: OpenView } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Competition | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // "Save as template" capture dialog (AC1): name only — configuration is
@@ -139,7 +145,7 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
         actorName,
         clientId: actor.clientId,
       });
-      if (openId === competition.id) setOpenId(null);
+      if (open?.id === competition.id) setOpen(null);
       closeDelete();
       await refresh();
     } catch (error) {
@@ -159,10 +165,47 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
     }
   }
 
-  if (openId) {
-    // The opened competition's roster screen (STORY-001-005). "Open" remains a
-    // client-side selection only (D8).
-    return <RosterView competitionId={openId} actor={actor} onBack={() => setOpenId(null)} />;
+  if (open) {
+    // The opened competition's screens: a thin per-competition sub-nav hosts
+    // the competition-scoped views — roster (STORY-001-005), draw spec
+    // (STORY-001-019) and the draw workflow console (STORY-001-018). "Open"
+    // remains a client-side selection only (D8).
+    return (
+      <div>
+        <div className="toolbar">
+          <button
+            className="btn btn-small"
+            onClick={() => setOpen({ id: open.id, view: "roster" })}
+            disabled={open.view === "roster"}
+          >
+            Roster
+          </button>{" "}
+          <button
+            className="btn btn-small"
+            onClick={() => setOpen({ id: open.id, view: "draw-spec" })}
+            disabled={open.view === "draw-spec"}
+          >
+            Draw spec
+          </button>{" "}
+          <button
+            className="btn btn-small"
+            onClick={() => setOpen({ id: open.id, view: "draw" })}
+            disabled={open.view === "draw"}
+          >
+            Draw
+          </button>
+        </div>
+        {open.view === "roster" && (
+          <RosterView competitionId={open.id} actor={actor} onBack={() => setOpen(null)} />
+        )}
+        {open.view === "draw-spec" && (
+          <DrawSpecView competitionId={open.id} actor={actor} onBack={() => setOpen(null)} />
+        )}
+        {open.view === "draw" && (
+          <DrawView competitionId={open.id} actor={actor} onBack={() => setOpen(null)} />
+        )}
+      </div>
+    );
   }
 
   if (editState) {
@@ -217,10 +260,9 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
                     <div className="row-actions">
                       <button
                         className="btn btn-small"
-                        onClick={() => setOpenId(competition.id)}
-                        disabled={openId === competition.id}
+                        onClick={() => setOpen({ id: competition.id, view: "roster" })}
                       >
-                        {openId === competition.id ? "Opened" : "Open"}
+                        Open
                       </button>
                       <button
                         className="btn btn-small"

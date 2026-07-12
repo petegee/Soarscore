@@ -316,9 +316,35 @@ export function taskConfigToPayload(config: CompetitionTaskConfig): TaskConfigUp
 // carries the fully materialised outcome (Safeguard 3) — never an RNG seed — so
 // replay reproduces the identical draw with no RNG in the projection (D4). Each
 // success appends a fresh draw.generated: supersede, never mutate (Decision #7).
-export type DrawEventType = "draw.specSaved" | "draw.generated";
+//
+// STORY-001-017 adds the CD's decision facts, also under scope = competitionId:
+// draw.accepted is a *promotion* fact — it carries only references (drawId,
+// specId) binding the acceptance to a specific stored draw.generated outcome,
+// never a re-copy of the outcome itself; draw.cancelled is a *discard* fact
+// that returns the contest to a generatable no-draw state. Supersede/append,
+// never mutate.
+export type DrawEventType =
+  | "draw.specSaved"
+  | "draw.generated"
+  | "draw.accepted"
+  | "draw.cancelled";
 
 export type DrawSpecSavedPayload = DrawSpecification;
 export type DrawGeneratedPayload = GeneratedDraw;
 
-export type DrawEventPayload = DrawSpecSavedPayload | DrawGeneratedPayload;
+export interface DrawAcceptedPayload {
+  competitionId: string;
+  drawId: string;
+  specId: string;
+}
+
+export interface DrawCancelledPayload {
+  competitionId: string;
+  drawId: string;
+}
+
+export type DrawEventPayload =
+  | DrawSpecSavedPayload
+  | DrawGeneratedPayload
+  | DrawAcceptedPayload
+  | DrawCancelledPayload;
