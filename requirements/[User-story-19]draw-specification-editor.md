@@ -18,15 +18,14 @@
   present (Area 4.1); the consecutive-flight constraint is off by default;
   every save is submitted to the base with actor identity (companion §1, D4);
   the client is stateless — the specification lives on the base.
-  **[Superseded 2026-07-13, decisions.md D14]**: the per-task class minimum
-  described here (and the numeric `minGroupSizeOverride` field this story
-  built to relax it) is no longer save-time-rejectable — it becomes advisory
-  (warn at generate, require Contest Director acknowledgement at accept),
-  per STORY-001-022. Only the roster-derived two-groups-per-round floor
-  (AC3/AC4 below) remains a hard save-time bound. STORY-001-022 scopes the
-  companion-app presentation of this as a follow-on UI story, not yet built —
-  so this screen's current AC2 and `minGroupSizeOverride` field remain the
-  shipped behaviour until that follow-on lands.
+  **[Superseded 2026-07-13, decisions.md D14; UI updated by STORY-001-023]**:
+  the per-task class minimum described here is no longer save-time-rejectable
+  — it is advisory (warn at generate, require Contest Director
+  acknowledgement at accept), per STORY-001-022, presented in the draw
+  workflow screen by STORY-001-023. The numeric `minGroupSizeOverride` field
+  this story built has been **removed** from this screen by STORY-001-023.
+  Only the roster-derived two-groups-per-round floor (AC3/AC4 below) remains
+  a hard save-time bound on this screen.
 - **Technical Complexity**: Low (a form over an existing validated
   save endpoint; no new backend).
 - **Business Complexity**: Low–Medium (a handful of fields and the
@@ -62,11 +61,13 @@ it was already built in STORY-001-009.
 > group-size minima)
 > Module: 001 (Organiser MVP) · Estimated effort: **2 days**
 >
-> **Status note (2026-07-13):** shipped and correct as of STORY-001-009's
-> backend, but `docs/requirements/decisions.md` D14 has since superseded the
-> `minGroupSizeOverride`/AC2 save-time-rejection mechanism this story built —
-> see STORY-001-022. This screen still needs a follow-on UI update once
-> STORY-001-022 lands; see the AC2 note below.
+> **Status note (2026-07-13, updated 2026-07-13):** shipped and correct as of
+> STORY-001-009's backend, but `docs/requirements/decisions.md` D14 superseded
+> the `minGroupSizeOverride`/AC2 save-time-rejection mechanism this story
+> built (STORY-001-022's backend policy). **STORY-001-023 has since shipped**
+> the corresponding UI change on this screen — the `minGroupSizeOverride`
+> field is removed; see the AC2 note below for what replaced it (presented on
+> the draw workflow screen, STORY-001-018/021, not here).
 
 ### Background
 
@@ -119,8 +120,9 @@ about deciding on a *generated* draw, not specifying one.
 - Save the specification to the base, surfacing the backend's acceptance or its
   bounds rejection with the explanation of the bound (including the
   spare-scorer override path). *(The class-rule-minimum half of this bound is
-  superseded by D14/STORY-001-022 — see AC2 note; the spare-scorer/two-groups
-  floor is unaffected.)*
+  superseded by D14/STORY-001-022, and this screen's UI was updated by
+  STORY-001-023 to match — see AC2 note; the spare-scorer/two-groups floor is
+  unaffected.)*
 - Recover and display the currently saved specification when the screen opens
   on any companion client.
 
@@ -143,22 +145,28 @@ consecutive-flight constraint off, chooses a lane-allocation policy and saves
 **Then** the specification is stored on the base, recorded with who saved it,
 and the competition is now ready for a draw to be generated.
 
-#### AC2: Out-of-bounds groups-per-round is rejected with the bound explained
+#### AC2: Out-of-bounds groups-per-round is rejected with the bound explained — **superseded, no longer this screen's behaviour**
 **Given** a 14-pilot roster and an F5J task whose groups need at least 6 pilots
 **When** the Organiser sets groups-per-round to 4 (which would force groups
 below the minimum) and saves
-**Then** the save is rejected and the screen explains the bound implied by the
-roster size and the class group minimum, and no specification is stored from
-that attempt.
+**Then** ~~the save is rejected and the screen explains the bound implied by
+the roster size and the class group minimum, and no specification is stored
+from that attempt~~.
 
-> **[Superseded 2026-07-13, decisions.md D14 / STORY-001-022]**: a per-task
-> class rule-fixed minimum (as opposed to the roster-derived two-groups floor
-> in AC3) is no longer a save-time rejection. STORY-001-022 replaces it with
-> a generate-time warning naming the task and rule clause, gated by the
-> Contest Director's explicit acknowledgement at accept. This AC — and the
-> `minGroupSizeOverride` field it validates — describe this screen's current,
-> still-shipped behaviour; they are pending revision once STORY-001-022's
-> companion-app follow-on UI story lands.
+> **[Superseded 2026-07-13, decisions.md D14 / STORY-001-022; UI landed
+> 2026-07-13, STORY-001-023]**: a per-task class rule-fixed minimum (as
+> opposed to the roster-derived two-groups floor in AC3, which is unaffected
+> and still save-time-rejected) is no longer a save-time rejection anywhere
+> in the system. This screen now saves the specification as given; the save
+> in the example above **succeeds**. Generation instead produces the closest
+> compliant grouping and attaches a warning naming the task and rule clause,
+> which the draw workflow screen (STORY-001-018/021, acknowledgement UI by
+> STORY-001-023) requires the Contest Director to acknowledge before
+> accepting. The `minGroupSizeOverride` field this AC originally validated
+> has been removed from this screen. This AC is retained here only as a
+> historical record of STORY-001-019's original scope — see
+> `[User-story-23]group-size-warning-acknowledgement.md` for the current
+> acceptance criteria covering this flow.
 
 #### AC3: Too-few-groups is rejected
 **Given** a 14-pilot roster

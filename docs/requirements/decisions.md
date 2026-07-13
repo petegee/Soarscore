@@ -456,8 +456,9 @@ tool for.
   lone-pilot flag) and is a scoring-integrity constraint, not an FAI rule
   number.
 - **STORY-001-022** delivers the detection, warning and acknowledgement
-  mechanism; STORY-001-020's AC4 (F3B Speed's roster-of-6 scenario) depends
-  on it. **STORY-001-023** delivers its companion-app presentation —
-  displaying and acknowledging a warning in the draw workflow screen, and
-  retiring the now-superseded `minGroupSizeOverride` field from the draw
-  specification editor — mirroring how STORY-001-021 presents STORY-001-020.
+  mechanism (**done**); STORY-001-020's AC4 (F3B Speed's roster-of-6
+  scenario) depends on it. **STORY-001-023** delivers its companion-app
+  presentation (**done**) — displaying and acknowledging a warning in the
+  draw workflow screen, and retiring the now-superseded
+  `minGroupSizeOverride` field from the draw specification editor —
+  mirroring how STORY-001-021 presents STORY-001-020.
