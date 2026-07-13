@@ -2,8 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   Competition,
   DrawEvidenceView,
+  FairnessMetric,
+  FlightGroup,
   GeneratedDraw,
+  MatchupDistribution,
   RosterEntryView,
+  TaskGroupSet,
+  TaskMatchupDistribution,
 } from "@soarscore/shared";
 import { apiRequest, ApiError } from "../api/client.js";
 import type { Actor } from "../identity/useActor.js";
@@ -32,10 +37,65 @@ function nameFor(map: Map<string, RosterEntryView>, rosterEntryId: string): stri
   return entry.pilotNumber != null ? `#${entry.pilotNumber} ${entry.pilotName}` : entry.pilotName;
 }
 
+// Shared per-round group/lane table body (STORY-001-021): extracted out of
+// DrawRounds so both the single-task path (whole round, unchanged below) and
+// the multi-task per-task sections (TaskDrawSections) render an identical
+// group/lane table without duplicating the sort/lonePilotFlagged logic.
+function renderRoundGroupsTable(
+  groups: FlightGroup[],
+  rosterMap: Map<string, RosterEntryView>,
+): JSX.Element {
+  return (
+    <div className="table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Group</th>
+            <th>Lane</th>
+            <th>Pilot</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...groups]
+            .sort((a, b) => a.flyingOrder - b.flyingOrder)
+            .flatMap((group) =>
+              [...group.members]
+                .sort((a, b) => a.lane - b.lane)
+                .map((member, index) => (
+                  <tr key={`${group.flyingOrder}-${member.rosterEntryId}`}>
+                    <td>
+                      {index === 0 && (
+                        <>
+                          Group {group.flyingOrder}
+                          {/* An arithmetically unavoidable singleton —
+                              badge it so the CD sees it before accepting. */}
+                          {group.lonePilotFlagged && (
+                            <>
+                              {" "}
+                              <span className="badge">lone pilot</span>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td>{member.lane}</td>
+                    <td>{nameFor(rosterMap, member.rosterEntryId)}</td>
+                  </tr>
+                )),
+            )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Rounds → groups (by flyingOrder) → lane-ordered pilots, names joined from
 // the roster (AC1). Shared verbatim between the candidate and accepted
 // renders so "accepted" is a status treatment, not a different draw view.
-function DrawRounds({
+// Single-task path only (STORY-001-021 AC3): body is unchanged other than
+// delegating the table itself to renderRoundGroupsTable — output is
+// identical to the pre-021 rendering.
+export function DrawRounds({
   draw,
   rosterMap,
 }: {
@@ -47,69 +107,32 @@ function DrawRounds({
       {draw.rounds.map((round) => (
         <section key={round.roundNumber}>
           <h2>Round {round.roundNumber}</h2>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Group</th>
-                  <th>Lane</th>
-                  <th>Pilot</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...round.groups]
-                  .sort((a, b) => a.flyingOrder - b.flyingOrder)
-                  .flatMap((group) =>
-                    [...group.members]
-                      .sort((a, b) => a.lane - b.lane)
-                      .map((member, index) => (
-                        <tr key={`${group.flyingOrder}-${member.rosterEntryId}`}>
-                          <td>
-                            {index === 0 && (
-                              <>
-                                Group {group.flyingOrder}
-                                {/* An arithmetically unavoidable singleton —
-                                    badge it so the CD sees it before accepting. */}
-                                {group.lonePilotFlagged && (
-                                  <>
-                                    {" "}
-                                    <span className="badge">lone pilot</span>
-                                  </>
-                                )}
-                              </>
-                            )}
-                          </td>
-                          <td>{member.lane}</td>
-                          <td>{nameFor(rosterMap, member.rosterEntryId)}</td>
-                        </tr>
-                      )),
-                  )}
-              </tbody>
-            </table>
-          </div>
+          {renderRoundGroupsTable(round.groups, rosterMap)}
         </section>
       ))}
     </>
   );
 }
 
-// The anti-repeat evidence (AC2): the metric and its scalar, the distribution
-// summary, and every pair's meet count with names substituted — enough for
-// the CD to judge fairness before deciding.
-function FairnessEvidence({
-  draw,
-  rosterMap,
-}: {
-  draw: GeneratedDraw;
-  rosterMap: Map<string, RosterEntryView>;
-}) {
+// Shared fairness-summary-line + pairs-table body (STORY-001-021). label is
+// null for the single-task path (no visible task label, per AC3) and the
+// task's name for a per-task card; attemptsRun is a whole-draw figure so it
+// is only shown when supplied (never repeated per task, per the analysis).
+function renderFairnessCard(
+  label: string | null,
+  metric: FairnessMetric,
+  metricValue: number,
+  distribution: MatchupDistribution,
+  attemptsRun: number | null,
+  rosterMap: Map<string, RosterEntryView>,
+): JSX.Element {
   return (
     <section>
-      <h2>Fairness evidence</h2>
+      <h2>{label ? `Fairness evidence — ${label}` : "Fairness evidence"}</h2>
       <p className="status-text">
-        Metric: {draw.metric} = {draw.metricValue} · worst repeat {draw.distribution.maxMeets} ·
-        total excess meets {draw.distribution.totalExcessMeets} · variance{" "}
-        {draw.distribution.variance} · fairest of {draw.attemptsRun} attempts
+        Metric: {metric} = {metricValue} · worst repeat {distribution.maxMeets} · total excess
+        meets {distribution.totalExcessMeets} · variance {distribution.variance}
+        {attemptsRun != null && <> · fairest of {attemptsRun} attempts</>}
       </p>
       <div className="table-wrap">
         <table className="data-table">
@@ -121,7 +144,7 @@ function FairnessEvidence({
             </tr>
           </thead>
           <tbody>
-            {draw.distribution.pairs.map((pair) => (
+            {distribution.pairs.map((pair) => (
               <tr key={`${pair.a}-${pair.b}`}>
                 <td>{nameFor(rosterMap, pair.a)}</td>
                 <td>{nameFor(rosterMap, pair.b)}</td>
@@ -133,6 +156,99 @@ function FairnessEvidence({
       </div>
     </section>
   );
+}
+
+// The anti-repeat evidence (AC2): the metric and its scalar, the distribution
+// summary, and every pair's meet count with names substituted — enough for
+// the CD to judge fairness before deciding. Single-task path only
+// (STORY-001-021 AC3): delegates to renderFairnessCard with label/attemptsRun
+// set from the flat fields — no new label introduced here.
+export function FairnessEvidence({
+  draw,
+  rosterMap,
+}: {
+  draw: GeneratedDraw;
+  rosterMap: Map<string, RosterEntryView>;
+}) {
+  return renderFairnessCard(
+    null,
+    draw.metric,
+    draw.metricValue,
+    draw.distribution,
+    draw.attemptsRun,
+    rosterMap,
+  );
+}
+
+// Multi-task composition view (STORY-001-021 AC1): one labelled section per
+// class-model task, each holding its own round-by-round group tables. Task
+// identity/order comes from the first round's taskGroups — constant across
+// rounds for a given draw (STORY-001-020) — never re-sorted here.
+export function TaskDrawSections({
+  draw,
+  rosterMap,
+}: {
+  draw: GeneratedDraw;
+  rosterMap: Map<string, RosterEntryView>;
+}) {
+  const tasks: TaskGroupSet[] = draw.rounds[0]?.taskGroups ?? [];
+  return (
+    <>
+      {tasks.map((task) => (
+        <section key={task.taskId}>
+          <h2>{task.taskName}</h2>
+          {draw.rounds.map((round) => {
+            const taskGroups = round.taskGroups.find((tg) => tg.taskId === task.taskId);
+            if (!taskGroups) return null;
+            return (
+              <section key={`${task.taskId}-${round.roundNumber}`}>
+                <h3>Round {round.roundNumber}</h3>
+                {renderRoundGroupsTable(taskGroups.groups, rosterMap)}
+              </section>
+            );
+          })}
+        </section>
+      ))}
+    </>
+  );
+}
+
+// Multi-task fairness view (STORY-001-021 AC2): one fairness card per task,
+// laid out side by side so the CD can compare tasks' figures without
+// scrolling — each card's metricValue/distribution stays its own, never
+// summed or averaged across tasks (per the business-rule safeguard).
+export function TaskFairnessRow({
+  draw,
+  rosterMap,
+}: {
+  draw: GeneratedDraw;
+  rosterMap: Map<string, RosterEntryView>;
+}) {
+  const taskDistributions: TaskMatchupDistribution[] = draw.taskDistributions;
+  return (
+    <div className="task-fairness-row">
+      {taskDistributions.map((entry) => (
+        <div key={entry.taskId}>
+          {renderFairnessCard(
+            entry.taskName,
+            draw.metric,
+            entry.metricValue,
+            entry.distribution,
+            null,
+            rosterMap,
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Display-mode gate (STORY-001-021): a draw's taskGroups length is constant
+// across rounds (one entry per class-model task), so the first round is a
+// sufficient, single source of truth — no separate class-model fetch. Every
+// existing single-task class's draw evaluates false here, unchanged.
+export function isMultiTask(draw: GeneratedDraw): boolean {
+  return (draw.rounds[0]?.taskGroups.length ?? 1) > 1;
 }
 
 export function DrawView({
@@ -334,8 +450,17 @@ export function DrawView({
             </button>
             {busy && <span className="status-text">Working…</span>}
           </div>
-          <DrawRounds draw={candidate} rosterMap={rosterMap} />
-          <FairnessEvidence draw={candidate} rosterMap={rosterMap} />
+          {isMultiTask(candidate) ? (
+            <>
+              <TaskDrawSections draw={candidate} rosterMap={rosterMap} />
+              <TaskFairnessRow draw={candidate} rosterMap={rosterMap} />
+            </>
+          ) : (
+            <>
+              <DrawRounds draw={candidate} rosterMap={rosterMap} />
+              <FairnessEvidence draw={candidate} rosterMap={rosterMap} />
+            </>
+          )}
         </>
       )}
 
@@ -349,8 +474,17 @@ export function DrawView({
             <span className="badge">accepted</span> This draw is the competition&apos;s accepted
             draw — lane adjustments, group management and reports build on it.
           </p>
-          <DrawRounds draw={accepted} rosterMap={rosterMap} />
-          <FairnessEvidence draw={accepted} rosterMap={rosterMap} />
+          {isMultiTask(accepted) ? (
+            <>
+              <TaskDrawSections draw={accepted} rosterMap={rosterMap} />
+              <TaskFairnessRow draw={accepted} rosterMap={rosterMap} />
+            </>
+          ) : (
+            <>
+              <DrawRounds draw={accepted} rosterMap={rosterMap} />
+              <FairnessEvidence draw={accepted} rosterMap={rosterMap} />
+            </>
+          )}
         </>
       )}
 

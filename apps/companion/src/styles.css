@@ -202,6 +202,20 @@ h1 {
   white-space: nowrap;
 }
 
+/* Per-task fairness cards side by side (STORY-001-021 AC2); wraps to a new
+   line on narrow/phone-sized viewports rather than forcing horizontal
+   scrolling of the comparison. */
+.task-fairness-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.task-fairness-row > div {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
 /* ---- Forms ---- */
 
 .form {
