@@ -7,6 +7,7 @@ import { EventStore } from "./eventstore/event-store.js";
 import { PilotLibraryProjection } from "./pilots/projection.js";
 import type { RosterReferenceChecker } from "./pilots/roster-reference-checker.js";
 import { PilotService } from "./pilots/service.js";
+import { seedPreviewPilots } from "./pilots/seed-preview-pilots.js";
 import { DomainError, NotFoundError, ReferencedPilotError, ValidationError } from "./pilots/errors.js";
 import { ClassModelProjection } from "./class-models/projection.js";
 import { ClassModelService } from "./class-models/service.js";
@@ -142,6 +143,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
     options.referenceChecker ??
       new ProjectionRosterReferenceChecker(rosterProjection, competitionProjection),
   );
+
+  // Preview-only convenience: gives a freshly-deployed preview environment
+  // (ephemeral SQLite, no persistent disk — see Dockerfile) some pilots to
+  // demo against without manual entry. Never runs on services where the flag
+  // is unset (production), and is a no-op once any pilot already exists.
+  if (process.env.SOARSCORE_SEED_PREVIEW_PILOTS === "true") {
+    seedPreviewPilots(pilotService);
+  }
 
   // Class models: an in-use model cannot be deleted (AC9), answered from real
   // competition state. Seed the six stock models once the projection has
