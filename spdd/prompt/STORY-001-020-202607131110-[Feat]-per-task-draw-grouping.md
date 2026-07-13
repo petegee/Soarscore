@@ -232,9 +232,15 @@ event type is introduced.
    from each task's own placement, alongside the existing flat
    `FlightGroup[]` mirror.
 4. A new private helper, `computeGroupSizeMinimumWarningForTask(model, task,
-   R, requestedG, effectiveG)`, depends on a task-aware rule-clause builder
-   (extends `groupSizeMinimumClauseFor` to append the task name for
-   multi-task classes).
+   R, requestedG, effectiveG)`, depends on the plain data field
+   `ContestClassModel.groupSizeMinimumClause` (a per-class-model rule-clause
+   string, `null` when the class has none) and appends the task name for
+   multi-task classes. This supersedes the earlier module-level
+   `groupSizeMinimumClauseFor(model)` switch-on-`sourceClass` helper, which
+   was deleted as part of the "core system must not know about any specific
+   competition class" architectural principle — the six clause
+   strings/nulls it used to compute per class now live as data on each
+   `STOCK_CLASS_MODELS` entry instead of in a code branch.
 5. `DrawProjection.copyDraw`/`copySpec` and
    `generatedDrawToPayload`/`drawSpecToPayload` (`packages/shared/src/draw.ts`)
    depend on the two new fields existing on `RoundDraw`/`GeneratedDraw` to
@@ -414,10 +420,17 @@ event type is introduced.
      TaskParameterSet, R: number, requestedG: number, effectiveG: number):
      ConstraintWarning`
      - Logic:
-       - `ruleClause = groupSizeMinimumClauseFor(model)` (existing helper,
-         unchanged — still returns the shared F3B.1.8b clause for any F3B
-         task, since the clause text itself doesn't differ by task, only
-         the numeric minimum does).
+       - `ruleClause = model.groupSizeMinimumClause ?? "the class's
+         group-size rule"` — reads the plain data field on
+         `ContestClassModel` (populated per stock model in
+         `STOCK_CLASS_MODELS`, e.g. `"F3B.1.8 b"` for F3B) rather than
+         calling a helper function; still yields the shared F3B.1.8b clause
+         for any F3B task, since the clause text itself doesn't differ by
+         task, only the numeric minimum does. This field replaces the
+         deleted module-level `groupSizeMinimumClauseFor(model)` switch —
+         the class-specific clause strings now live as data on the class
+         model instead of a code branch in the draw service, per the
+         core-system/class-model separation principle.
        - `id: `group-size-minimum:${task.id}`` — task-qualified, so AC4's
          Speed warning and any co-occurring Duration/Distance warning stay
          independently acknowledgeable via `accept()`'s existing by-id

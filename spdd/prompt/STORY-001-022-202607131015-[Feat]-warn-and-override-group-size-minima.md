@@ -174,8 +174,9 @@ per the analysis's recommendation) — no schema removal, no migration.
    `runAttempt`.
 2. `DrawService.materialise`/`generate` call a new private helper,
    `computeGroupSizeMinimumWarning(model, R, requestedG, effectiveG,
-   resolvedMin)`, that builds the warning (or returns none) using a new
-   rule-clause lookup table.
+   resolvedMin)`, that builds the warning (or returns none) by reading
+   `model.groupSizeMinimumClause` directly off the class model — no
+   service-layer lookup table.
 3. `DrawService.accept` depends on `candidate.groupSizeWarnings` (read from
    the projection) and the new `acknowledgedWarningIds` input.
 4. The route layer (`apps/base/src/routes/draw.ts`) depends on an extended
@@ -187,14 +188,19 @@ per the analysis's recommendation) — no schema removal, no migration.
 
 ### Layered Architecture
 1. **Shared types layer** (`packages/shared/src/draw.ts`,
-   `packages/shared/src/events.ts`): `ConstraintWarning.id`,
-   `GeneratedDraw.groupSizeWarnings`, `drawDecisionRequestSchema`'s new
-   field, `DrawAcceptedPayload.acknowledgedWarningIds`, and the payload
-   copy functions (`generatedDrawToPayload`) extended to carry the new
-   array through deep-copy.
+   `packages/shared/src/events.ts`, `packages/shared/src/class-model.ts`):
+   `ConstraintWarning.id`, `GeneratedDraw.groupSizeWarnings`,
+   `drawDecisionRequestSchema`'s new field,
+   `DrawAcceptedPayload.acknowledgedWarningIds`, the payload copy functions
+   (`generatedDrawToPayload`) extended to carry the new array through
+   deep-copy, and `ContestClassModel.groupSizeMinimumClause` (the
+   data-driven rule-clause field, per CLAUDE.md's core architectural law —
+   the core system must not know about any specific competition class, so
+   this citation lives on the class model, not a service-layer lookup).
 2. **Service layer** (`apps/base/src/draw/service.ts`): all business logic —
-   the fallback grouping search, the warning construction, the
-   rule-clause lookup, and the acknowledgement check in `accept`.
+   the fallback grouping search, the warning construction (reading the
+   clause off `model.groupSizeMinimumClause`), and the acknowledgement
+   check in `accept`.
 3. **Error layer** (`apps/base/src/draw/errors.ts`): the one new error class.
 4. **Route layer** (`apps/base/src/routes/draw.ts`): passes the new field
    from the parsed body into `accept` unchanged (no new endpoint).
@@ -247,25 +253,32 @@ per the analysis's recommendation) — no schema removal, no migration.
    projection's `draw.accepted` handler must default a missing value to
    `[]` when replaying an older event, never throw.
 
-### Create Rule-Clause Lookup — `groupSizeMinimumClauseFor` (`apps/base/src/draw/service.ts`, module-level helper)
-1. Responsibility: map a task/class to the exact FAI rule clause string to
-   cite in a warning message (sourced from `docs/requirements/rules/`, house
-   rule 1 — read-only reference, never altered).
-2. Methods:
-   - `groupSizeMinimumClauseFor(model: ContestClassModel): string | null`
-     - Logic:
-       - Return `null` if no task on the model carries a non-null
-         `minGroupSize` (F5K, F5L — AC6).
-       - For F3B (`basis === "separate-per-task"`), return `"F3B.1.8 b"`
-         (shared by Duration/Distance/Speed per the rule doc; distinct
-         per-task naming is STORY-001-020's concern, deferred per AC2).
-       - For F3J, return `"F3J.6"`.
-       - For F3K, return `"F3K.9"`.
-       - For F5J, return `"5.5.11.8"`.
-     - Match on `model.sourceClass` (or `model.id`'s stock prefix) rather
-       than a new discipline-branch scattered through the service — keep
-       this the single place a class maps to its clause string, so a
-       seventh class only adds one line here (NFR-2).
+### Add Data Field — `ContestClassModel.groupSizeMinimumClause` (`packages/shared/src/class-model.ts`)
+1. Responsibility: carry the exact FAI rule clause string to cite in a
+   warning message as a plain, data-driven field on the class model itself
+   (sourced from `docs/requirements/rules/`, house rule 1 — read-only
+   reference, never altered), rather than a core-system function that
+   branches on discipline — per CLAUDE.md's core architectural law, the core
+   system must not know about any specific competition class, so this
+   citation lives in the Contest Class Model, not a `switch` in
+   `DrawService`.
+2. Attributes:
+   - `groupSizeMinimumClause: string | null` — `null` where the class fixes
+     no per-group minimum (F5K, F5L — AC6) and so never raises the warning;
+     otherwise the clause string, identity metadata like `sourceClass`
+     (preserved verbatim through clone/edit, never user-editable, excluded
+     from the Zod request schemas).
+   - Populated per stock model in `STOCK_CLASS_MODELS`: `"F3B.1.8 b"` (F3B;
+     shared by Duration/Distance/Speed per the rule doc — distinct per-task
+     naming is STORY-001-020's concern, deferred per AC2), `"F3J.6.1"`
+     (F3J), `"F3K.9.1"` (F3K), `"5.5.11.8"` (F5J), `null` (F5K, F5L).
+3. Threading: `classModelToCreatedPayload()` (`packages/shared/src/events.ts`)
+   carries the field into the persisted event payload; `ClassModelService`'s
+   `clone()`/`update()` (`apps/base/src/class-models/service.ts`) preserve it
+   verbatim from the source/existing model — the same pattern as
+   `sourceClass`. No lookup function exists in the service layer; a seventh
+   class only adds one entry to `STOCK_CLASS_MODELS` (NFR-2), no code change
+   outside the class model.
 
 ### Update Service Method — `DrawService.resolveMin`
 1. Responsibility: resolve the class model's rule-fixed per-group minimum,
@@ -323,9 +336,10 @@ per the analysis's recommendation) — no schema removal, no migration.
    - `computeGroupSizeMinimumWarning(model, R, requestedG, effectiveG, resolvedMin): ConstraintWarning | null`
      - Logic:
        - Return `null` if `effectiveG === requestedG` (no fallback fired).
-       - Look up the rule clause via `groupSizeMinimumClauseFor(model)`;
-         if `null` (shouldn't occur here since a fallback only fires when
-         `resolvedMin > 1`), return `null` defensively.
+       - Read the rule clause directly from
+         `model.groupSizeMinimumClause ?? "the class's group-size rule"`
+         (defensive fallback text, not `null`, since a fallback only fires
+         when `resolvedMin > 1`, i.e. the model does carry a clause).
        - Return `{ id: "group-size-minimum", constraint: "group-size-minimum", message: `<model.name>: <clause> requires at least <resolvedMin> per group; a roster of <R> requesting <requestedG> group(s) cannot meet it, so <effectiveG> group(s) were generated instead` }`.
      - AC1 wording check: for F3J roster 5, `requestedG = 1`,
        `resolvedMin = 6`, `effectiveG = 1` (already 1, fallback search finds
@@ -427,7 +441,7 @@ per the analysis's recommendation) — no schema removal, no migration.
    - AC5: F3J roster of 12, `groupsPerRound: 2` → `groupSizeWarnings` is
      empty (boundary: `12/2 = 6` meets the minimum exactly, not below it).
    - AC6: F5J or F5L roster of any size → `groupSizeWarnings` is always
-     empty, because `groupSizeMinimumClauseFor` returns `null` and
+     empty, because the model's `groupSizeMinimumClause` field is `null` and
      `resolvedMin` resolves to `1`.
 
 ## Norms
@@ -460,9 +474,9 @@ per the analysis's recommendation) — no schema removal, no migration.
    hoc console logging is introduced; the event log IS the audit trail.
 6. **Documentation Standards**: match the existing file's terse, "why not
    what" comment style — a comment only where a non-obvious constraint or
-   rule citation needs explaining (e.g. why the clause lookup keys off
-   `sourceClass` not a name string), never restating what the code already
-   says.
+   rule citation needs explaining (e.g. why the clause is a plain data field
+   on the class model rather than a service-layer lookup keyed on
+   `sourceClass`), never restating what the code already says.
 
 ## Safeguards
 
@@ -513,12 +527,12 @@ per the analysis's recommendation) — no schema removal, no migration.
    (`ConstraintWarning`, `GeneratedDraw`, `DrawAcceptedPayload`) additively;
    no existing field is renamed, retyped, or removed, preserving D4's
    append-only replay guarantee.
-8. **Data Constraints**: the rule-clause lookup
-   (`groupSizeMinimumClauseFor`) must source its citation strings only from
+8. **Data Constraints**: the rule-clause citation strings on
+   `ContestClassModel.groupSizeMinimumClause` must source only from
    `docs/requirements/rules/` (house rule 1 — read-only, never edited to fit
-   this story) — the four citations to use are `F3J.6`, `F3K.9`, `5.5.11.8`
-   (F5J), and `F3B.1.8 b` (shared across F3B's three tasks in this story's
-   per-round scope).
+   this story) — the four citations to use are `F3J.6.1`, `F3K.9.1`,
+   `5.5.11.8` (F5J), and `F3B.1.8 b` (shared across F3B's three tasks in
+   this story's per-round scope).
 9. **API Constraints**: the accept route's request body shape gains one
    optional-with-default field (`acknowledgedWarningIds`, default `[]`) — a
    client that never sends it behaves exactly as before this story for any

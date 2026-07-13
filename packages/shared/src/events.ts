@@ -133,6 +133,7 @@ export function classModelToCreatedPayload(model: ContestClassModel): ClassModel
     basis: model.basis,
     speedInverted: model.speedInverted,
     dropWorst: { ...model.dropWorst },
+    groupSizeMinimumClause: model.groupSizeMinimumClause,
     tasks: model.tasks.map(copyTaskParameterSet),
   };
 }

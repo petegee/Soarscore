@@ -15,8 +15,11 @@ import { DrawService } from "../src/draw/service.js";
 import {
   DrawGenerationFailedError,
   DrawGroupSizeWarningUnacknowledgedError,
+  DrawNotAcceptedError,
   DrawSpecNotFoundError,
   GroupSizeOutOfBoundsError,
+  LaneClashError,
+  LaneTargetNotFoundError,
   ValidationError,
 } from "../src/draw/errors.js";
 

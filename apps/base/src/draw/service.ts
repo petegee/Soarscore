@@ -38,30 +38,6 @@ import {
   ValidationError,
 } from "./errors.js";
 
-// The exact FAI rule clause to cite for a class's rule-fixed per-group
-// minimum (house rule 1: sourced from docs/requirements/rules/, never
-// altered to fit this story). F5K/F5L fix no per-group minimum, so they
-// never raise a group-size-minimum warning (AC6). Keyed on sourceClass, the
-// single place a class maps to its clause string — a seventh class only adds
-// one line here (NFR-2).
-function groupSizeMinimumClauseFor(model: ContestClassModel): string | null {
-  switch (model.sourceClass) {
-    case "F3B":
-      // Shared by Duration/Distance/Speed per the rule doc; distinct
-      // per-task naming is STORY-001-020's concern (deferred, AC2).
-      return "F3B.1.8 b";
-    case "F3J":
-      return "F3J.6.1";
-    case "F3K":
-      return "F3K.9.1";
-    case "F5J":
-      return "5.5.11.8";
-    case "F5K":
-    case "F5L":
-      return null;
-  }
-}
-
 // Fixed attempt budget (Decision #7). At MVP scale (≤ 20 pilots, ≤ 8 rounds) a
 // couple hundred randomised attempts run comfortably and give the fairness
 // metric a meaningful field to pick from. The retained draw is the "fairest of
@@ -481,7 +457,7 @@ export class DrawService {
   // shows `resolveGroupPlanForTask(task, R, requestedG, allowSingleGroup)`
   // with no `model` parameter, but the same section's "Otherwise build the
   // warning via computeGroupSizeMinimumWarningForTask" step requires `model`
-  // (for `model.name` and `groupSizeMinimumClauseFor(model)`). `model` is
+  // (for `model.name` and `model.groupSizeMinimumClause`). `model` is
   // added here as a fifth parameter to resolve that internal inconsistency —
   // the alternative (deriving the clause/name without the model) isn't
   // possible, so this is the minimal fix.
@@ -519,9 +495,9 @@ export class DrawService {
 
   // STORY-001-020: build a task-qualified, individually-acknowledgeable
   // warning when a task's own minimum cannot be met. The rule clause text
-  // itself doesn't differ by task (groupSizeMinimumClauseFor stays keyed on
-  // the class, since F3B.1.8b's clause is shared by all three tasks) — only
-  // the numeric minimum and the task name differ.
+  // itself doesn't differ by task (model.groupSizeMinimumClause stays keyed
+  // on the class, since F3B.1.8b's clause is shared by all three tasks) —
+  // only the numeric minimum and the task name differ.
   private computeGroupSizeMinimumWarningForTask(
     model: ContestClassModel,
     task: TaskParameterSet,
@@ -529,7 +505,7 @@ export class DrawService {
     requestedG: number,
     effectiveG: number,
   ): ConstraintWarning {
-    const ruleClause = groupSizeMinimumClauseFor(model) ?? "the class's group-size rule";
+    const ruleClause = model.groupSizeMinimumClause ?? "the class's group-size rule";
     return {
       // Task-qualified id (STORY-001-020): so AC4's Speed warning and any
       // co-occurring Duration/Distance warning stay independently

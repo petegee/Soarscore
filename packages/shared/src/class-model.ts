@@ -118,6 +118,12 @@ export interface ContestClassModel {
   // TaskParameterSet is the authoritative per-task copy.
   speedInverted: boolean;
   dropWorst: DropWorstRule;
+  // The FAI rule clause to cite for this class's rule-fixed per-group minimum
+  // (house rule 1), shared across all of a class's tasks; null where the class
+  // fixes no per-group minimum (F5K/F5L) and so never raises the warning.
+  // Identity metadata like sourceClass — preserved verbatim through clone/edit,
+  // never user-editable.
+  groupSizeMinimumClause: string | null;
   // The class's rule-fixed task parameters (STORY-001-008). One task for the
   // man-on-man classes, three for F3B, five for F5K. The flat pointsPerSecond /
   // landingTable that 016 stored are folded into these tasks (NFR-1).
@@ -259,6 +265,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     basis: "separate-per-task",
     speedInverted: true,
     dropWorst: { threshold: 5, unit: "task" },
+    // Shared by Duration/Distance/Speed (F3B.1.8 b).
+    groupSizeMinimumClause: "F3B.1.8 b",
     tasks: [
       // Task A Duration: 1 pt per full second, whole seconds (f3b.md Task A).
       // The landing-bonus table is deferred (was null under 016) — landings
@@ -314,6 +322,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     // Drop-worst only beyond 7 rounds — the highest threshold of the six
     // classes (f3j.md).
     dropWorst: { threshold: 7, unit: "round" },
+    groupSizeMinimumClause: "F3J.6.1",
     tasks: [
       // 0.1 s timing (F3J.10.2), 1 pt/s, its 100→0 fine landing table (f3j.md).
       // Working time is rule-fixed — no per-round override.
@@ -347,6 +356,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     speedInverted: false,
     // Drop the lowest round once 6 or more rounds are flown (f3k.md).
     dropWorst: { threshold: 5, unit: "round" },
+    groupSizeMinimumClause: "F3K.9.1",
     tasks: [
       // 0.1 s truncated (F3K.7); flight-time only, no landing (F3K §2). The only
       // MVP task whose working time the organiser may reduce (F3K.11).
@@ -373,6 +383,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     speedInverted: false,
     // Drop-worst beyond 4 rounds (f5j.md).
     dropWorst: { threshold: 4, unit: "round" },
+    groupSizeMinimumClause: "5.5.11.8",
     tasks: [
       // Whole seconds truncated (5.5.11.12 b), 1 pt/s, its coarser 50→0 table
       // (f5j.md). Launch faults −100 each; safety-area −300; access-corridor −1000.
@@ -405,6 +416,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     speedInverted: false,
     // Drop the lowest round once 7 or more rounds are flown (f5k.md).
     dropWorst: { threshold: 6, unit: "round" },
+    // F5K fixes no per-group minimum (AC6).
+    groupSizeMinimumClause: null,
     // Tasks A–E (5.5.10.2). Same scoring shape per task; the round → task
     // schedule and per-task working times are deferred (per-discipline). Every
     // task carries the NLH slopes (AC6) and the shared F5K penalty catalogue.
@@ -433,6 +446,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     speedInverted: false,
     // Drop-worst beyond 5 rounds (f5l.md).
     dropWorst: { threshold: 5, unit: "round" },
+    // F5L fixes no per-group minimum (AC6).
+    groupSizeMinimumClause: null,
     tasks: [
       // 2 pt/s (5.5.12.11.1), whole seconds truncated, the 100→0 fine table
       // (f5l.md). Its penalties zero the flight/task rather than deduct a fixed

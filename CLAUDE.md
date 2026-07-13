@@ -71,6 +71,30 @@ The FAI PDFs (source-docs) remain the ultimate authority.
 - **Final:** sum of round scores, with class-specific **drop-worst**; penalties
   deducted from the final aggregate and retained even if their round is dropped.
 
+## Core architectural law: class model vs. core system
+
+**The core system must not know about any specific competition class.** All
+variance between classes (F3B, F3J, F3K, F5J, F5K, F5L, and any future class)
+is encapsulated in a **Contest Class Model** — a data-driven definition
+(group-score basis, drop-worst rule, tasks, metrics, penalties, landing
+table). The core system reads and interprets class models generically; it
+never branches on discipline.
+
+**The test:** if adding or changing a competition class requires editing code
+outside that class's own model/definition, the core system has leaked a
+class-specific assumption and the design is wrong — not the class.
+
+This is not a style preference — it's why an MVP with 6 classes can reach
+GliderScore's 14-class breadth without rework. Treat it as a constraint on
+every design and code decision, not just a note for class-related stories:
+data model, device descriptors, scoring pipeline, draw logic, reporting —
+all of it defers to the class model rather than special-casing a discipline.
+
+Backing detail: [NFR-1](docs/requirements/non-functional.md#nfr-1--one-centralised-flexible-task-model)
+(one place that knows a class's shape), [NFR-2](docs/requirements/non-functional.md#nfr-2--additive-only-extensibility-for-new-competition-types)
+(extension is additive-only), [D12](docs/requirements/decisions.md#d12--contest-classes-are-modelled-as-seeded-cloneable-definitions)
+(the concrete Contest Class Model shape).
+
 ## Key constraints (recorded in docs/requirements/decisions.md)
 
 - **Trust model:** club-level tool for a small, trusted NZ group. No auth, no

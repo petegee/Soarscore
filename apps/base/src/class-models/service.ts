@@ -103,6 +103,7 @@ export class ClassModelService {
       basis: source.basis,
       speedInverted: source.speedInverted,
       dropWorst: { ...source.dropWorst },
+      groupSizeMinimumClause: source.groupSizeMinimumClause,
       // Deep-copy every task (precision, coefficients, penalties, owned table)
       // so the clone shares no nested object with its source (AC5).
       tasks: source.tasks.map(copyTaskParameterSet),
@@ -140,6 +141,7 @@ export class ClassModelService {
       basis: parsed.basis,
       speedInverted: parsed.speedInverted,
       dropWorst: { ...parsed.dropWorst },
+      groupSizeMinimumClause: existing.groupSizeMinimumClause,
       // Preserve each task id where the edit kept one; mint otherwise — mirroring
       // the landing-table id handling so kept tasks diff positionally (AC2/AC5).
       tasks: parsed.tasks.map((task) => this.materialiseTask(task)),
