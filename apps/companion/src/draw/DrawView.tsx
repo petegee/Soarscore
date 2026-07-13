@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
 import type {
   Competition,
   ConstraintWarning,
@@ -45,7 +45,7 @@ function nameFor(map: Map<string, RosterEntryView>, rosterEntryId: string): stri
 function renderRoundGroupsTable(
   groups: FlightGroup[],
   rosterMap: Map<string, RosterEntryView>,
-): JSX.Element {
+): ReactElement {
   return (
     <div className="table-wrap">
       <table className="data-table">
@@ -126,7 +126,7 @@ function renderFairnessCard(
   distribution: MatchupDistribution,
   attemptsRun: number | null,
   rosterMap: Map<string, RosterEntryView>,
-): JSX.Element {
+): ReactElement {
   return (
     <section>
       <h2>{label ? `Fairness evidence — ${label}` : "Fairness evidence"}</h2>
