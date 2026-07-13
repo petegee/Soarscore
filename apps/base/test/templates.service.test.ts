@@ -17,6 +17,10 @@ import {
 import { TemplateProjection } from "../src/templates/projection.js";
 import { TemplateService } from "../src/templates/service.js";
 import { TemplateNotFoundError, ValidationError } from "../src/templates/errors.js";
+import { RosterProjection } from "../src/roster/projection.js";
+import { DrawProjection } from "../src/draw/projection.js";
+import { LifecycleProjection } from "../src/lifecycle/projection.js";
+import { LifecycleGuard } from "../src/lifecycle/guard.js";
 
 const attribution = { actorName: "tester", originClient: "test-client", authority: "organiser" };
 
@@ -31,12 +35,15 @@ function buildServices(capturedScores: CapturedScoresProvider = new NoScoresYetP
     getReferencingCompetitions: () => [],
   }).seedStockModels();
   const competitionProjection = new CompetitionProjection();
+  const lifecycleProjection = new LifecycleProjection(new RosterProjection(), new DrawProjection());
   const competitionService = new CompetitionService(
     eventStore,
     competitionProjection,
     classModelProjection,
     new AlwaysUnlockedProvider(),
     capturedScores,
+    lifecycleProjection,
+    new LifecycleGuard(),
   );
   const projection = new TemplateProjection();
   const service = new TemplateService(

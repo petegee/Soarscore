@@ -447,3 +447,72 @@ export type ScoringEventPayload =
   | ResultCapturedPayload
   | LonePilotResolvedPayload
   | AnnulmentOverrideRequestedPayload;
+
+// Lifecycle transition event contracts (STORY-001-024). This story OWNS the
+// authoritative lifecycle-state derivation and the generic transition guard; it
+// does NOT originate these events. Their emission is owned by other stories —
+// competition.started (STORY-001-025), competition.suspended/resumed
+// (STORY-001-013), competition.locked (the Lock story), group.opened/scored
+// (STORY-001-011 / Area 6), competition.roundAdvanced (the round story). This
+// story ships only the type declarations so those owning stories emit
+// consistently, and consumes them in its LifecycleProjection when present.
+//
+// Scope convention (matching the rest of this file): registry-level lifecycle
+// facts (started / suspended / resumed / locked / roundAdvanced) file under the
+// fixed scope = "competitions"; content-level run facts (group.opened /
+// group.scored) file under scope = competitionId. Every payload carries
+// competitionId so a "competitions"-scoped consumer keys on the payload and a
+// competitionId-scoped consumer keys on the record scope.
+//
+// Additive-only (NFR-2): consuming a not-yet-emitted type is a no-op today and
+// becomes live automatically when its owning story starts appending it.
+export type LifecycleEventType =
+  | "competition.started"
+  | "competition.suspended"
+  | "competition.resumed"
+  | "competition.locked"
+  | "competition.roundAdvanced"
+  | "group.opened"
+  | "group.scored";
+
+export interface CompetitionStartedPayload {
+  competitionId: string;
+}
+
+export interface CompetitionSuspendedPayload {
+  competitionId: string;
+}
+
+export interface CompetitionResumedPayload {
+  competitionId: string;
+}
+
+export interface CompetitionLockedPayload {
+  competitionId: string;
+}
+
+export interface CompetitionRoundAdvancedPayload {
+  competitionId: string;
+  roundNumber: number;
+}
+
+export interface GroupOpenedPayload {
+  competitionId: string;
+  roundNumber: number;
+  groupFlyingOrder: number;
+}
+
+export interface GroupScoredPayload {
+  competitionId: string;
+  roundNumber: number;
+  groupFlyingOrder: number;
+}
+
+export type LifecycleEventPayload =
+  | CompetitionStartedPayload
+  | CompetitionSuspendedPayload
+  | CompetitionResumedPayload
+  | CompetitionLockedPayload
+  | CompetitionRoundAdvancedPayload
+  | GroupOpenedPayload
+  | GroupScoredPayload;

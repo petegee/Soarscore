@@ -6,11 +6,14 @@ import {
   competitionToCreatedPayload,
   type Attribution,
   type Competition,
+  type LifecycleStateResponse,
 } from "@soarscore/shared";
 import type { EventStore } from "../eventstore/event-store.js";
 import type { CompetitionProjection } from "./projection.js";
 import type { ClassModelProjection } from "../class-models/projection.js";
 import type { CapturedScoresProvider, LockStateProvider } from "./state-providers.js";
+import type { LifecycleProjection } from "../lifecycle/projection.js";
+import type { LifecycleGuard } from "../lifecycle/guard.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
   CompetitionClassLockedError,
@@ -32,6 +35,11 @@ export class CompetitionService {
     private readonly classModelProjection: ClassModelProjection,
     private readonly lockState: LockStateProvider,
     private readonly capturedScores: CapturedScoresProvider,
+    // STORY-001-024: the authoritative lifecycle layer. Delete legality is now
+    // decided against the derived state so it lives in one place; the read side
+    // exposes the current state and what may be done now.
+    private readonly lifecycleProjection: LifecycleProjection,
+    private readonly lifecycleGuard: LifecycleGuard,
   ) {}
 
   list(): Competition[] {
@@ -42,6 +50,21 @@ export class CompetitionService {
     const competition = this.projection.getById(id);
     if (!competition) throw new CompetitionNotFoundError(`Competition ${id} not found`);
     return competition;
+  }
+
+  // The derived lifecycle state + what may be done now (STORY-001-024). A
+  // Deleted competition still answers (200, state "Deleted") off its tombstone
+  // — 404 only for an id that never existed (AC1/observability).
+  getLifecycleState(id: string): LifecycleStateResponse {
+    if (!this.projection.getById(id) && !this.lifecycleProjection.isDeleted(id)) {
+      throw new CompetitionNotFoundError(`Competition ${id} not found`);
+    }
+    const state = this.lifecycleProjection.getState(id);
+    return {
+      state: state.state,
+      subState: state.setupSubState ?? state.runningSubState ?? null,
+      admissibleActions: this.lifecycleGuard.admissibleActions(state),
+    };
   }
 
   create(input: unknown, attribution: Attribution): Competition {
@@ -136,6 +159,12 @@ export class CompetitionService {
     if (this.lockState.isLocked(id)) {
       throw new CompetitionLockedError("Cannot delete a locked competition");
     }
+    // Authoritative state-machine guard (STORY-001-024): Delete is admissible
+    // only from Setup, so a Running / Suspended / (event-)Locked competition is
+    // rejected uniformly with TransitionNotAllowedError and no state change
+    // (AC4/AC7). A Setup-state competition passes through to the captured-scores
+    // confirmation flow below, unchanged (STORY-001-003).
+    this.lifecycleGuard.assertAdmissible(this.lifecycleProjection.getState(id), "Delete");
     if (this.capturedScores.hasCapturedScores(id) && !req.confirmDestroysResults) {
       throw new CompetitionDeleteNeedsConfirmationError(
         "This competition has captured scores; deletion will destroy them",

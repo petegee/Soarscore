@@ -9,6 +9,10 @@ import {
   NoScoresYetProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
+import { RosterProjection } from "../src/roster/projection.js";
+import { DrawProjection } from "../src/draw/projection.js";
+import { LifecycleProjection } from "../src/lifecycle/projection.js";
+import { LifecycleGuard } from "../src/lifecycle/guard.js";
 import { CompetitionTaskConfigProjection } from "../src/task-config/projection.js";
 import { CompetitionTaskConfigService } from "../src/task-config/service.js";
 import {
@@ -36,6 +40,8 @@ function build() {
     classModelProjection,
     new AlwaysUnlockedProvider(),
     new NoScoresYetProvider(),
+    new LifecycleProjection(new RosterProjection(), new DrawProjection()),
+    new LifecycleGuard(),
   );
   const taskConfigProjection = new CompetitionTaskConfigProjection();
   const service = new CompetitionTaskConfigService(

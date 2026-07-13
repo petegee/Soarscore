@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyInstance } from "fastify";
 import fastifyStatic from "@fastify/static";
 import type { ErrorResponse } from "@soarscore/shared";
-import { EventStore } from "./eventstore/event-store.js";
+import { EventStore, type EventRecord } from "./eventstore/event-store.js";
 import { PilotLibraryProjection } from "./pilots/projection.js";
 import type { RosterReferenceChecker } from "./pilots/roster-reference-checker.js";
 import { PilotService } from "./pilots/service.js";
@@ -93,6 +93,9 @@ import {
 import { ProjectionEntryScoresProvider } from "./scoring/entry-scores-provider.js";
 import { registerScoringRoutes } from "./routes/scoring.js";
 import { registerHealthRoute } from "./routes/health.js";
+import { LifecycleProjection } from "./lifecycle/projection.js";
+import { LifecycleGuard } from "./lifecycle/guard.js";
+import { TransitionNotAllowedError } from "./lifecycle/errors.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -124,11 +127,18 @@ export interface AppOptions {
 export function buildApp(options: AppOptions): FastifyInstance {
   const app = Fastify({ logger: true });
 
+  // The lifecycle projection is cross-cutting (it folds competition.*, roster.*,
+  // draw.* and lifecycle.* facts from several services), so — unlike the
+  // per-service projections that each apply their own appends — it is fed the
+  // whole append stream through this hook. Assigned once constructed below; the
+  // hook only fires during append, which never happens before then.
+  let onEvent: ((record: EventRecord) => void) | undefined;
   const eventStore = new EventStore(options.dbPath, (record) => {
     app.log.info(
       { seq: record.seq, type: record.type, scope: record.scope, actor: record.attribution.actorName },
       "event appended",
     );
+    onEvent?.(record);
   });
   // Projections first: the pilot service's default reference checker answers
   // from roster + competition state (RD1).
@@ -157,6 +167,18 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // (matching the existing ordering discipline).
   const scoringProjection = new ScoringProjection();
   scoringProjection.rebuild(eventStore.readAll());
+  // Lifecycle projection (STORY-001-024): the single authoritative lifecycle
+  // state per competition, derived from the log. Constructed after roster and
+  // draw (it reads both, read-only, via injection — never their services, so no
+  // cycle) and rebuilt from the log on init. Fed every subsequent append via the
+  // event-store hook so getState stays current mid-session.
+  const lifecycleProjection = new LifecycleProjection(rosterProjection, drawProjection);
+  lifecycleProjection.rebuild(eventStore.readAll());
+  onEvent = (record) => lifecycleProjection.apply(record);
+  // The generic, class-agnostic transition-legality guard — a single stateless
+  // interpreter of (state, action) shared by the delete path here and, in later
+  // stories, by the owning suspend/resume/lock/round-advance services.
+  const lifecycleGuard = new LifecycleGuard();
 
   const pilotService = new PilotService(
     eventStore,
@@ -189,6 +211,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     classModelProjection,
     options.lockStateProvider ?? new AlwaysUnlockedProvider(),
     options.capturedScoresProvider ?? new NoScoresYetProvider(),
+    lifecycleProjection,
+    lifecycleGuard,
   );
 
   // After CompetitionService: the seed path delegates competition creation to
@@ -435,6 +459,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
     }
     if (error instanceof LonePilotAlreadyResolvedError || error instanceof AnnulmentOverridePendingError) {
       reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof TransitionNotAllowedError) {
+      reply.code(409).send({
+        code: error.code,
+        message: error.message,
+        details: { currentState: error.currentState, attemptedAction: error.attemptedAction },
+      } satisfies ErrorResponse);
       return;
     }
     if (error instanceof DomainError) {

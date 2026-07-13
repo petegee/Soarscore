@@ -9,6 +9,8 @@ import {
   NoScoresYetProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
+import { LifecycleProjection } from "../src/lifecycle/projection.js";
+import { LifecycleGuard } from "../src/lifecycle/guard.js";
 import { RosterProjection } from "../src/roster/projection.js";
 import { DrawProjection } from "../src/draw/projection.js";
 import { DrawService } from "../src/draw/service.js";
@@ -48,6 +50,8 @@ function build() {
     classModelProjection,
     new AlwaysUnlockedProvider(),
     new NoScoresYetProvider(),
+    new LifecycleProjection(new RosterProjection(), new DrawProjection()),
+    new LifecycleGuard(),
   );
   const rosterProjection = new RosterProjection();
   const drawProjection = new DrawProjection();

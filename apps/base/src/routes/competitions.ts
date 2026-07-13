@@ -19,6 +19,13 @@ export function registerCompetitionRoutes(
     return competitionService.get(request.params.id);
   });
 
+  // STORY-001-024: the single authoritative lifecycle state + admissible
+  // actions. A Deleted competition returns 200 with state "Deleted"; only a
+  // never-existed id 404s.
+  app.get<{ Params: { id: string } }>("/api/competitions/:id/lifecycle", async (request) => {
+    return competitionService.getLifecycleState(request.params.id);
+  });
+
   app.post("/api/competitions", async (request, reply) => {
     const attribution = attributionFromHeaders(request.headers as Record<string, unknown>);
     const competition = competitionService.create(request.body, attribution);

@@ -11,6 +11,10 @@ import {
   type LockStateProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
+import { RosterProjection } from "../src/roster/projection.js";
+import { DrawProjection } from "../src/draw/projection.js";
+import { LifecycleProjection } from "../src/lifecycle/projection.js";
+import { LifecycleGuard } from "../src/lifecycle/guard.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
   CompetitionClassLockedError,
@@ -39,12 +43,17 @@ function buildService(
     getReferencingCompetitions: () => [],
   }).seedStockModels();
   const projection = new CompetitionProjection();
+  const rosterProjection = new RosterProjection();
+  const drawProjection = new DrawProjection();
+  const lifecycleProjection = new LifecycleProjection(rosterProjection, drawProjection);
   const service = new CompetitionService(
     eventStore,
     projection,
     classModelProjection,
     lockState,
     capturedScores,
+    lifecycleProjection,
+    new LifecycleGuard(),
   );
   return { eventStore, projection, service };
 }
