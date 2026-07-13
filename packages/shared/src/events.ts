@@ -5,7 +5,14 @@ import type { ContestClassModel, TaskParameterSet } from "./class-model.js";
 import type { ContestTemplate } from "./contest-template.js";
 import type { RosterEntry } from "./roster.js";
 import type { CompetitionTaskConfig } from "./task-config.js";
-import type { DrawSpecification, GeneratedDraw } from "./draw.js";
+import type {
+  ApprovalStatus,
+  DrawSpecification,
+  GeneratedDraw,
+  GroupMovedPayload,
+  GroupSplitPayload,
+  ReflightPreparedPayload,
+} from "./draw.js";
 
 export type PilotEventType = "pilot.created" | "pilot.updated" | "pilot.deleted";
 
@@ -135,6 +142,7 @@ export function classModelToCreatedPayload(model: ContestClassModel): ClassModel
     dropWorst: { ...model.dropWorst },
     groupSizeMinimumClause: model.groupSizeMinimumClause,
     tasks: model.tasks.map(copyTaskParameterSet),
+    lonePilotBehaviour: model.lonePilotBehaviour,
   };
 }
 
@@ -325,14 +333,27 @@ export function taskConfigToPayload(config: CompetitionTaskConfig): TaskConfigUp
 // never a re-copy of the outcome itself; draw.cancelled is a *discard* fact
 // that returns the contest to a generatable no-draw state. Supersede/append,
 // never mutate.
+// STORY-001-011 adds three more overlay/handoff facts, also under
+// scope = competitionId: draw.groupMoved and draw.groupSplit are topology
+// overlay facts (never a rewrite of the stored draw.generated/draw.accepted
+// payload — "latest overlay wins", the same discipline as this file's other
+// supersede-on-repeat facts); draw.reflightPrepared records a new re-flyer
+// group *and* the pending-CD-approval handoff in one fact (Safeguard 6 — this
+// story never appends a second event flipping approvalStatus).
 export type DrawEventType =
   | "draw.specSaved"
   | "draw.generated"
   | "draw.accepted"
-  | "draw.cancelled";
+  | "draw.cancelled"
+  | "draw.groupMoved"
+  | "draw.groupSplit"
+  | "draw.reflightPrepared";
 
 export type DrawSpecSavedPayload = DrawSpecification;
 export type DrawGeneratedPayload = GeneratedDraw;
+export type DrawGroupMovedPayload = GroupMovedPayload;
+export type DrawGroupSplitPayload = GroupSplitPayload;
+export type DrawReflightPreparedPayload = ReflightPreparedPayload;
 
 export interface DrawAcceptedPayload {
   competitionId: string;
@@ -354,4 +375,75 @@ export type DrawEventPayload =
   | DrawSpecSavedPayload
   | DrawGeneratedPayload
   | DrawAcceptedPayload
-  | DrawCancelledPayload;
+  | DrawCancelledPayload
+  | DrawGroupMovedPayload
+  | DrawGroupSplitPayload
+  | DrawReflightPreparedPayload;
+
+// Per-competition captured-flight-result events (STORY-001-011). The minimal
+// aggregate this story builds to close the gap `scoring.ts` (STORY-001-007)
+// left open: a way to record one raw result per pilot per round/task (two
+// legitimately, for a re-flight — `resultKind` disambiguates them), and the
+// facts a group's official score recompute reads. Filed under
+// scope = competitionId, same as every other per-competition content event.
+export type ScoringEventType =
+  | "scoring.resultCaptured"
+  | "scoring.lonePilotResolved"
+  | "scoring.annulmentOverrideRequested";
+
+// Two legitimate captures per pilot/round/task ("original" and "reflight") —
+// never a capture conflict. A repeated capture of the same kind supersedes
+// (latest wins), matching this file's other supersede-on-repeat facts.
+export type ResultKind = "original" | "reflight";
+
+// pilotId is denormalised at capture time (the seat's occupant when the
+// result was recorded) — the EntryScoresProvider seam's planted contract:
+// "every captured score must record the pilotId of the seat's occupant at
+// capture time", so results aggregate per pilot, never transfer with a
+// replaced seat.
+export interface ResultCapturedPayload {
+  competitionId: string;
+  roundNumber: number;
+  taskId: string;
+  taskName: string;
+  rosterEntryId: string;
+  pilotId: string;
+  raw: number;
+  resultKind: ResultKind;
+  capturedAt: string;
+}
+
+// How a lone-pilot group's dummy was resolved (dummy pilot, or none because
+// the class annuls instead) — a materialised, replayable fact, resolved once
+// per group and never re-rolled (Safeguard 3).
+export type LonePilotMode = "dummy" | "annul";
+
+export interface LonePilotResolvedPayload {
+  competitionId: string;
+  roundNumber: number;
+  taskId: string;
+  taskName: string;
+  groupFlyingOrder: number;
+  mode: LonePilotMode;
+  // null when mode === "annul" — no dummy is ever chosen for an annulled
+  // group within this story's surface.
+  dummyRosterEntryId: string | null;
+}
+
+// F3B's one-valid-result annulment: recorded as a pending CD-approval
+// handoff, never granted here (Safeguard 6), exactly like
+// draw.reflightPrepared's approvalStatus field.
+export interface AnnulmentOverrideRequestedPayload {
+  competitionId: string;
+  roundNumber: number;
+  taskId: string;
+  taskName: string;
+  groupFlyingOrder: number;
+  approvalStatus: ApprovalStatus;
+  reason: string;
+}
+
+export type ScoringEventPayload =
+  | ResultCapturedPayload
+  | LonePilotResolvedPayload
+  | AnnulmentOverrideRequestedPayload;

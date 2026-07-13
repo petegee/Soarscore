@@ -107,6 +107,9 @@ export class ClassModelService {
       // Deep-copy every task (precision, coefficients, penalties, owned table)
       // so the clone shares no nested object with its source (AC5).
       tasks: source.tasks.map(copyTaskParameterSet),
+      // Inherited verbatim from the source; editable afterwards via update()
+      // like every other rule-fixed field (STORY-001-011).
+      lonePilotBehaviour: source.lonePilotBehaviour,
     };
 
     const record = this.eventStore.append({
@@ -145,6 +148,7 @@ export class ClassModelService {
       // Preserve each task id where the edit kept one; mint otherwise — mirroring
       // the landing-table id handling so kept tasks diff positionally (AC2/AC5).
       tasks: parsed.tasks.map((task) => this.materialiseTask(task)),
+      lonePilotBehaviour: parsed.lonePilotBehaviour,
     };
 
     const record = this.eventStore.append({

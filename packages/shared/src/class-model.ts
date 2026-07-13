@@ -23,6 +23,17 @@ export type DropWorstUnit = "round" | "task";
 // editable clone. The only auditable path to a rule variation is clone-then-edit.
 export type ModelOrigin = "stock" | "custom";
 
+// How a group that resolves to exactly one scoring pilot is handled
+// (STORY-001-011). "dummy" pairs the lone pilot against a randomly drawn
+// other competitor's own flight purely to anchor the ratio (never counted
+// toward the dummy's own score, general-rules §3's no-auto-1000 rule).
+// "annul" is F3B's class-fixed rule (f3b.md: a one-valid-result group is
+// annulled) — it requires the Contest Director's explicit per-contest
+// override before any dummy may substitute. Additive-only (NFR-2): every
+// stock model states this explicitly, no code infers it from `basis` or
+// `sourceClass`.
+export type LonePilotBehaviour = "dummy" | "annul";
+
 export interface DropWorstRule {
   threshold: number;
   unit: DropWorstUnit;
@@ -128,6 +139,10 @@ export interface ContestClassModel {
   // man-on-man classes, three for F3B, five for F5K. The flat pointsPerSecond /
   // landingTable that 016 stored are folded into these tasks (NFR-1).
   tasks: TaskParameterSet[];
+  // How a lone-pilot group (STORY-001-011) resolves for this class: pair
+  // against a random dummy, or annul pending CD override. Default "dummy";
+  // F3B is the one class fixing "annul" (general-rules §3, f3b.md).
+  lonePilotBehaviour: LonePilotBehaviour;
 }
 
 // Whether any task in this model carries the "or all competitors" escape on
@@ -267,6 +282,9 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     dropWorst: { threshold: 5, unit: "task" },
     // Shared by Duration/Distance/Speed (F3B.1.8 b).
     groupSizeMinimumClause: "F3B.1.8 b",
+    // F3B annuls a one-valid-result group rather than pairing a dummy
+    // (general-rules §3, f3b.md) — requires a CD override to substitute.
+    lonePilotBehaviour: "annul",
     tasks: [
       // Task A Duration: 1 pt per full second, whole seconds (f3b.md Task A).
       // The landing-bonus table is deferred (was null under 016) — landings
@@ -323,6 +341,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     // classes (f3j.md).
     dropWorst: { threshold: 7, unit: "round" },
     groupSizeMinimumClause: "F3J.6.1",
+    lonePilotBehaviour: "dummy",
     tasks: [
       // 0.1 s timing (F3J.10.2), 1 pt/s, its 100→0 fine landing table (f3j.md).
       // Working time is rule-fixed — no per-round override.
@@ -357,6 +376,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     // Drop the lowest round once 6 or more rounds are flown (f3k.md).
     dropWorst: { threshold: 5, unit: "round" },
     groupSizeMinimumClause: "F3K.9.1",
+    lonePilotBehaviour: "dummy",
     tasks: [
       // 0.1 s truncated (F3K.7); flight-time only, no landing (F3K §2). The only
       // MVP task whose working time the organiser may reduce (F3K.11).
@@ -384,6 +404,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     // Drop-worst beyond 4 rounds (f5j.md).
     dropWorst: { threshold: 4, unit: "round" },
     groupSizeMinimumClause: "5.5.11.8",
+    lonePilotBehaviour: "dummy",
     tasks: [
       // Whole seconds truncated (5.5.11.12 b), 1 pt/s, its coarser 50→0 table
       // (f5j.md). Launch faults −100 each; safety-area −300; access-corridor −1000.
@@ -418,6 +439,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     dropWorst: { threshold: 6, unit: "round" },
     // F5K fixes no per-group minimum (AC6).
     groupSizeMinimumClause: null,
+    lonePilotBehaviour: "dummy",
     // Tasks A–E (5.5.10.2). Same scoring shape per task; the round → task
     // schedule and per-task working times are deferred (per-discipline). Every
     // task carries the NLH slopes (AC6) and the shared F5K penalty catalogue.
@@ -448,6 +470,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     dropWorst: { threshold: 5, unit: "round" },
     // F5L fixes no per-group minimum (AC6).
     groupSizeMinimumClause: null,
+    lonePilotBehaviour: "dummy",
     tasks: [
       // 2 pt/s (5.5.12.11.1), whole seconds truncated, the 100→0 fine table
       // (f5l.md). Its penalties zero the flight/task rather than deduct a fixed
@@ -528,6 +551,9 @@ export function deriveDeviations(
   }
   if (custom.dropWorst.unit !== source.dropWorst.unit) {
     note("dropWorst.unit", source.dropWorst.unit, custom.dropWorst.unit);
+  }
+  if (custom.lonePilotBehaviour !== source.lonePilotBehaviour) {
+    note("lonePilotBehaviour", source.lonePilotBehaviour, custom.lonePilotBehaviour);
   }
 
   // Positional task diff keyed by task id. A task added or removed relative to
@@ -682,6 +708,9 @@ export const updateClassModelRequestSchema = z.object({
   speedInverted: z.boolean(),
   dropWorst: dropWorstSchema,
   tasks: z.array(updateTaskSchema).min(1, "At least one task is required"),
+  lonePilotBehaviour: z.enum(["dummy", "annul"], {
+    errorMap: () => ({ message: "A lone-pilot behaviour is required" }),
+  }),
 });
 
 export type CloneClassModelRequest = z.infer<typeof cloneClassModelRequestSchema>;

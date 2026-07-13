@@ -87,4 +87,33 @@ export function registerDrawRoutes(app: FastifyInstance, drawService: DrawServic
       return drawService.cancel(request.params.competitionId, drawId, attribution);
     },
   );
+
+  // STORY-001-011: Organiser-authority group management + re-flight
+  // preparation. Every route below is Organiser-attributed — never
+  // cd-attributionFromHeaders; the approval-handoff fields on
+  // prepareReflight's response record that a CD decision is *needed*, they
+  // do not stamp CD authority on the preparing action itself.
+  app.post<{ Params: CompetitionParams }>(
+    "/api/competitions/:competitionId/draw/groups/move",
+    async (request) => {
+      const attribution = attributionFromHeaders(request.headers as Record<string, unknown>);
+      return drawService.moveGroup(request.params.competitionId, request.body, attribution);
+    },
+  );
+
+  app.post<{ Params: CompetitionParams }>(
+    "/api/competitions/:competitionId/draw/groups/split",
+    async (request) => {
+      const attribution = attributionFromHeaders(request.headers as Record<string, unknown>);
+      return drawService.splitGroup(request.params.competitionId, request.body, attribution);
+    },
+  );
+
+  app.post<{ Params: CompetitionParams }>(
+    "/api/competitions/:competitionId/draw/reflight/prepare",
+    async (request) => {
+      const attribution = attributionFromHeaders(request.headers as Record<string, unknown>);
+      return drawService.prepareReflight(request.params.competitionId, request.body, attribution);
+    },
+  );
 }

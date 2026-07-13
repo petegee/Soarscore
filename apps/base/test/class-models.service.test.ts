@@ -140,6 +140,7 @@ describe("ClassModelService — clone / edit (AC5–AC7)", () => {
         speedInverted: clone.speedInverted,
         dropWorst: { threshold: 3, unit: "round" },
         tasks: clone.tasks,
+        lonePilotBehaviour: clone.lonePilotBehaviour,
       },
       attribution,
     );
@@ -171,6 +172,7 @@ describe("ClassModelService — clone / edit (AC5–AC7)", () => {
             pointsPerSecond: 3,
           },
         ],
+        lonePilotBehaviour: clone.lonePilotBehaviour,
       },
       attribution,
     );

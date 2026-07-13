@@ -75,3 +75,54 @@ export class DrawGroupSizeWarningUnacknowledgedError extends DomainError {
     super(message);
   }
 }
+
+// STORY-001-011: group move/split/re-flight-prepare all operate only on an
+// *accepted* draw — attempting one against a not-yet-accepted candidate (or
+// no draw at all) reads as "no accepted draw exists yet" (mirrors
+// STORY-001-010's precedent). 409 — the request conflicts with the contest's
+// current draw state.
+export class DrawNotAcceptedError extends DomainError {
+  readonly code = "DRAW_NOT_ACCEPTED";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+// AC1: the round/task/rosterEntryId/target group named by a move or split
+// request doesn't resolve against the effective composition. 404.
+export class GroupMoveTargetNotFoundError extends DomainError {
+  readonly code = "GROUP_MOVE_TARGET_NOT_FOUND";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+// AC1/AC2: the move/split would violate the group-size minimum or the
+// no-back-to-back constraint. The message names the violated constraint
+// ("group-size-minimum" / "consecutive-flight"); nothing is appended before
+// this is thrown. 409.
+export class GroupMoveClashError extends DomainError {
+  readonly code = "GROUP_MOVE_CLASH";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+// A split would leave either resulting group below the class minimum without
+// a permitted escape, or movedRosterEntryIds is not a strict subset of the
+// source group's current membership. 409.
+export class GroupSplitInvalidError extends DomainError {
+  readonly code = "GROUP_SPLIT_INVALID";
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+// AC3: the named entitled pilot is not seated in the referenced round/task.
+// 404.
+export class ReflightEntitlementNotFoundError extends DomainError {
+  readonly code = "REFLIGHT_ENTITLEMENT_NOT_FOUND";
+  constructor(message: string) {
+    super(message);
+  }
+}

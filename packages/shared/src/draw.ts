@@ -244,6 +244,116 @@ export const drawDecisionRequestSchema = z.object({
 
 export type DrawDecisionRequest = z.infer<typeof drawDecisionRequestSchema>;
 
+// STORY-001-011: Organiser-authority group management (move a pilot, split a
+// group) and re-flight preparation — an overlay on the *accepted* draw that
+// never rewrites its stored draw.generated/draw.accepted payload. Every
+// concept here is task-scoped ((roundNumber, taskId)), mirroring
+// STORY-001-020's per-task independence: a move in F3B's Duration task never
+// implies the same move in Distance or Speed.
+
+// One seat moved between two groups of the same round/task (AC1).
+// taskName is denormalised at write time (mirrors TaskGroupSet), the same
+// self-describing-payload discipline as everywhere else in this module.
+export interface GroupMovedPayload {
+  competitionId: string;
+  drawId: string;
+  roundNumber: number;
+  taskId: string;
+  taskName: string;
+  rosterEntryId: string;
+  fromGroupFlyingOrder: number;
+  toGroupFlyingOrder: number;
+}
+
+// A group split into two: the seats named in movedRosterEntryIds leave the
+// source group for a brand-new group (AC1).
+export interface GroupSplitPayload {
+  competitionId: string;
+  drawId: string;
+  roundNumber: number;
+  taskId: string;
+  taskName: string;
+  sourceGroupFlyingOrder: number;
+  newGroupFlyingOrder: number;
+  movedRosterEntryIds: string[];
+}
+
+// A Contest-Director-authority decision this story only ever *records as
+// pending*, never grants (Safeguard 6) — approval itself is a future story's
+// action. This union has exactly one member for that reason; a future story
+// adds "approved"/"rejected" as its own supersede event, not an edit here.
+export type ApprovalStatus = "pending-contest-director-approval";
+
+// A re-flight prepared for one entitled pilot: a new re-flyer group filled to
+// the task's resolved minimum by random draw from eligible others (AC3/AC4).
+// approvalStatus records that CD approval is *needed*, not granted.
+export interface ReflightPreparedPayload {
+  competitionId: string;
+  drawId: string;
+  roundNumber: number;
+  taskId: string;
+  taskName: string;
+  entitledRosterEntryId: string;
+  reflightGroupFlyingOrder: number;
+  fillerRosterEntryIds: string[];
+  approvalStatus: ApprovalStatus;
+  reason: string;
+}
+
+// Structural validation only (Norm 2) — the existence of the round/task/
+// rosterEntryId/target group in *this* accepted draw, and every clash check,
+// is a cross-aggregate concern that stays in DrawService.
+export const groupMoveRequestSchema = z.object({
+  roundNumber: z.number().int().positive(),
+  // Optional: defaults to model.tasks[0].id (single-task classes never see a
+  // selector), same idiom as every other task-scoped request in this module.
+  taskId: z.string().min(1).optional(),
+  rosterEntryId: z.string().min(1, "A roster entry id is required"),
+  toGroupFlyingOrder: z.number().int().positive(),
+});
+
+export type GroupMoveRequest = z.infer<typeof groupMoveRequestSchema>;
+
+export const groupSplitRequestSchema = z.object({
+  roundNumber: z.number().int().positive(),
+  taskId: z.string().min(1).optional(),
+  sourceGroupFlyingOrder: z.number().int().positive(),
+  movedRosterEntryIds: z
+    .array(z.string().min(1))
+    .min(1, "At least one pilot must move to the new group"),
+});
+
+export type GroupSplitRequest = z.infer<typeof groupSplitRequestSchema>;
+
+export const reflightPrepareRequestSchema = z.object({
+  roundNumber: z.number().int().positive(),
+  taskId: z.string().min(1).optional(),
+  entitledRosterEntryId: z.string().min(1, "A roster entry id is required"),
+  reason: z.string().min(1, "A reason is required").max(500),
+});
+
+export type ReflightPrepareRequest = z.infer<typeof reflightPrepareRequestSchema>;
+
+// One round's effective group composition for one task: the accepted draw's
+// stored groups, overlaid with any move/split/re-flight-prepared facts —
+// "latest overlay wins", never a rewrite of the stored draw (mirrors
+// DrawProjection's other overlay maps). reflightGroupFlags is parallel to
+// groups[] (true marks a group synthesised by prepareReflight).
+export interface EffectiveRound {
+  roundNumber: number;
+  groups: FlightGroup[];
+  reflightGroupFlags: boolean[];
+}
+
+// The read view returned by group move/split/prepare and by a direct read of
+// the effective composition for one task across every round (AC1/AC3).
+export interface EffectiveGroupsView {
+  drawId: string;
+  taskId: string;
+  taskName: string;
+  rounds: EffectiveRound[];
+}
+
 // Deep-copy the spec for an event payload so no appended payload aliases caller
 // state (mirrors taskConfigToPayload).
 export function drawSpecToPayload(spec: DrawSpecification): DrawSpecification {

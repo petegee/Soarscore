@@ -4,20 +4,29 @@ import {
   saveDrawSpecRequestSchema,
   drawSpecToPayload,
   generatedDrawToPayload,
+  eligibleOtherPilots,
+  groupMoveRequestSchema,
+  groupSplitRequestSchema,
+  reflightPrepareRequestSchema,
   type Attribution,
   type Competition,
   type ConstraintWarning,
   type ContestClassModel,
   type DrawEvidenceView,
   type DrawSpecification,
+  type EffectiveGroupsView,
+  type EffectiveRound,
   type FairnessMetric,
   type FlightGroup,
   type GeneratedDraw,
   type GroupMembership,
+  type GroupMovedPayload,
+  type GroupSplitPayload,
   type LaneAllocationPolicy,
   type MatchupDistribution,
   type MeetCount,
   modelAllowsAllCompetitorsFallback,
+  type ReflightPreparedPayload,
   type RoundDraw,
   type TaskGroupSet,
   type TaskMatchupDistribution,
@@ -33,8 +42,13 @@ import {
   DrawCandidateSupersededError,
   DrawGenerationFailedError,
   DrawGroupSizeWarningUnacknowledgedError,
+  DrawNotAcceptedError,
   DrawSpecNotFoundError,
+  GroupMoveClashError,
+  GroupMoveTargetNotFoundError,
   GroupSizeOutOfBoundsError,
+  GroupSplitInvalidError,
+  ReflightEntitlementNotFoundError,
   ValidationError,
 } from "./errors.js";
 
@@ -348,6 +362,357 @@ export class DrawService {
     });
     this.projection.apply(record);
     return this.getEvidence(competitionId);
+  }
+
+  // ---- STORY-001-011: group management + re-flight preparation ----------
+
+  // AC1/AC2: move one seat between two groups of the same round/task on the
+  // *accepted* draw. Clash-checked before any append (Safeguard 1) — nothing
+  // is appended if any check fails.
+  moveGroup(competitionId: string, input: unknown, attribution: Attribution): EffectiveGroupsView {
+    const parsed = parseOrThrow(groupMoveRequestSchema, input);
+    const competition = this.getCompetition(competitionId);
+    const model = this.getModel(competition);
+    const accepted = this.projection.getAccepted(competitionId);
+    if (!accepted) {
+      throw new DrawNotAcceptedError(
+        `Competition ${competitionId} has no accepted draw to adjust — accept a draw first`,
+      );
+    }
+    const { task, resolvedTaskId } = this.resolveTask(model, parsed.taskId);
+
+    const effective = this.projection.getEffectiveGroups(competitionId, parsed.roundNumber, resolvedTaskId);
+    if (effective.length === 0) {
+      throw new GroupMoveTargetNotFoundError(
+        `Round ${parsed.roundNumber} of ${task.name} has no groups in the accepted draw`,
+      );
+    }
+    const fromGroup = effective.find((g) =>
+      g.members.some((m) => m.rosterEntryId === parsed.rosterEntryId),
+    );
+    if (!fromGroup) {
+      throw new GroupMoveTargetNotFoundError(
+        `Roster entry ${parsed.rosterEntryId} is not seated in round ${parsed.roundNumber} of ${task.name}`,
+      );
+    }
+    const toGroup = effective.find((g) => g.flyingOrder === parsed.toGroupFlyingOrder);
+    if (!toGroup) {
+      throw new GroupMoveTargetNotFoundError(
+        `Group ${parsed.toGroupFlyingOrder} does not exist in round ${parsed.roundNumber} of ${task.name}`,
+      );
+    }
+    if (fromGroup.flyingOrder === toGroup.flyingOrder) {
+      throw new GroupMoveTargetNotFoundError("The pilot is already in the target group");
+    }
+
+    // Clash (a): the destination group must have room — the move must not
+    // itself starve the *source* group below its resolved minimum without a
+    // compensating fill (Approach §2). An already-lonePilotFlagged source
+    // dropping further isn't a *new* clash.
+    const min = task.minGroupSize ?? 1;
+    if (fromGroup.members.length - 1 < min && !fromGroup.lonePilotFlagged) {
+      throw new GroupMoveClashError(
+        `group-size-minimum: moving this pilot would drop round ${parsed.roundNumber}'s group ${fromGroup.flyingOrder} (${task.name}) below the required minimum of ${min} scoring pilots`,
+      );
+    }
+
+    // Clash (b): the consecutive-flight constraint (AC2), only when the
+    // accepted spec opted in.
+    const spec = this.projection.getSpec(competitionId);
+    if (spec?.avoidConsecutiveFlights) {
+      this.assertNoConsecutiveFlightClash(
+        competitionId,
+        resolvedTaskId,
+        task.name,
+        parsed.roundNumber,
+        parsed.rosterEntryId,
+        toGroup.flyingOrder,
+        effective.length,
+      );
+    }
+
+    const payload: GroupMovedPayload = {
+      competitionId,
+      drawId: accepted.id,
+      roundNumber: parsed.roundNumber,
+      taskId: resolvedTaskId,
+      taskName: task.name,
+      rosterEntryId: parsed.rosterEntryId,
+      fromGroupFlyingOrder: fromGroup.flyingOrder,
+      toGroupFlyingOrder: toGroup.flyingOrder,
+    };
+    const record = this.eventStore.append({
+      scope: competitionId,
+      type: "draw.groupMoved",
+      payload,
+      attribution,
+    });
+    this.projection.apply(record);
+    return this.buildEffectiveGroupsView(competitionId, accepted.id, resolvedTaskId, task.name);
+  }
+
+  // AC1: split sourceGroupFlyingOrder's membership, carving
+  // movedRosterEntryIds off into a brand-new group. Reuses the same
+  // resolution as moveGroup, substituting "both resulting groups clear the
+  // floor" for the single-group check.
+  splitGroup(competitionId: string, input: unknown, attribution: Attribution): EffectiveGroupsView {
+    const parsed = parseOrThrow(groupSplitRequestSchema, input);
+    const competition = this.getCompetition(competitionId);
+    const model = this.getModel(competition);
+    const accepted = this.projection.getAccepted(competitionId);
+    if (!accepted) {
+      throw new DrawNotAcceptedError(
+        `Competition ${competitionId} has no accepted draw to adjust — accept a draw first`,
+      );
+    }
+    const { task, resolvedTaskId } = this.resolveTask(model, parsed.taskId);
+
+    const effective = this.projection.getEffectiveGroups(competitionId, parsed.roundNumber, resolvedTaskId);
+    const source = effective.find((g) => g.flyingOrder === parsed.sourceGroupFlyingOrder);
+    if (!source) {
+      throw new GroupMoveTargetNotFoundError(
+        `Group ${parsed.sourceGroupFlyingOrder} does not exist in round ${parsed.roundNumber} of ${task.name}`,
+      );
+    }
+
+    const sourceIds = new Set(source.members.map((m) => m.rosterEntryId));
+    const movedIds = new Set(parsed.movedRosterEntryIds);
+    const isStrictSubset =
+      movedIds.size === parsed.movedRosterEntryIds.length &&
+      movedIds.size > 0 &&
+      movedIds.size < source.members.length &&
+      [...movedIds].every((id) => sourceIds.has(id));
+    if (!isStrictSubset) {
+      throw new GroupSplitInvalidError(
+        `The pilots to move must be a strict, non-empty subset of group ${source.flyingOrder}'s current membership`,
+      );
+    }
+
+    // Floor check: neither resulting group may be left empty. Unlike a
+    // *move* (whose group-size-minimum clash actively protects an existing
+    // group from being starved, AC1), a deliberate split producing a
+    // singleton is exactly this story's mechanism for constructing a
+    // post-disruption lone-pilot group (AC6/AC7) — Norm 4 treats a
+    // split-induced singleton and a draw-time-flagged one identically at
+    // recompute time, so the split action must be able to create one. This
+    // is a deliberate, narrower reading than the Canvas's literal "neither
+    // resulting group drops below 2 unless already permitted" text — that
+    // reading would make AC6's own "via a split that leaves a singleton"
+    // scenario unreachable for every class except F3B Speed (the one task
+    // carrying minGroupSizeAllCompetitorsFallback), which cannot be the
+    // intent given AC6 is framed as "a non-F3B group".
+    const remainingCount = source.members.length - movedIds.size;
+    if (remainingCount < 1 || movedIds.size < 1) {
+      throw new GroupSplitInvalidError(
+        `Splitting group ${source.flyingOrder} of round ${parsed.roundNumber} (${task.name}) would leave an empty group`,
+      );
+    }
+
+    const newGroupFlyingOrder = Math.max(0, ...effective.map((g) => g.flyingOrder)) + 1;
+    const payload: GroupSplitPayload = {
+      competitionId,
+      drawId: accepted.id,
+      roundNumber: parsed.roundNumber,
+      taskId: resolvedTaskId,
+      taskName: task.name,
+      sourceGroupFlyingOrder: source.flyingOrder,
+      newGroupFlyingOrder,
+      movedRosterEntryIds: parsed.movedRosterEntryIds,
+    };
+    const record = this.eventStore.append({
+      scope: competitionId,
+      type: "draw.groupSplit",
+      payload,
+      attribution,
+    });
+    this.projection.apply(record);
+    return this.buildEffectiveGroupsView(competitionId, accepted.id, resolvedTaskId, task.name);
+  }
+
+  // AC3/AC4: build a new re-flyer group to the task's resolved minimum by
+  // random draw from eligible others, and record the pending-CD-approval
+  // handoff (Safeguard 6) — never appends a second event that flips it.
+  prepareReflight(
+    competitionId: string,
+    input: unknown,
+    attribution: Attribution,
+  ): ReflightPreparedPayload {
+    const parsed = parseOrThrow(reflightPrepareRequestSchema, input);
+    const competition = this.getCompetition(competitionId);
+    const model = this.getModel(competition);
+    const accepted = this.projection.getAccepted(competitionId);
+    if (!accepted) {
+      throw new DrawNotAcceptedError(
+        `Competition ${competitionId} has no accepted draw to adjust — accept a draw first`,
+      );
+    }
+    const { task, resolvedTaskId } = this.resolveTask(model, parsed.taskId);
+
+    const effective = this.projection.getEffectiveGroups(competitionId, parsed.roundNumber, resolvedTaskId);
+    const allSeatedIds = effective.flatMap((g) => g.members.map((m) => m.rosterEntryId));
+    if (!allSeatedIds.includes(parsed.entitledRosterEntryId)) {
+      throw new ReflightEntitlementNotFoundError(
+        `Roster entry ${parsed.entitledRosterEntryId} is not seated in round ${parsed.roundNumber} of ${task.name}`,
+      );
+    }
+
+    // Every other competitor already in a re-flight group this round/task,
+    // and anyone whose own group is currently lonePilotFlagged, is excluded
+    // from the filler pool (Approach §3, a stated conservative assumption) —
+    // a filler draw must never create a *second* lone-pilot group as a side
+    // effect.
+    const existingPreparations = this.projection
+      .getReflightPreparations(competitionId)
+      .filter((p) => p.roundNumber === parsed.roundNumber && p.taskId === resolvedTaskId);
+    const alreadyInReflight = new Set<string>();
+    for (const p of existingPreparations) {
+      alreadyInReflight.add(p.entitledRosterEntryId);
+      for (const filler of p.fillerRosterEntryIds) alreadyInReflight.add(filler);
+    }
+    const loneSeatedIds = new Set(
+      effective.filter((g) => g.lonePilotFlagged).flatMap((g) => g.members.map((m) => m.rosterEntryId)),
+    );
+    const excludeIds = new Set<string>([
+      parsed.entitledRosterEntryId,
+      ...alreadyInReflight,
+      ...loneSeatedIds,
+    ]);
+    const pool = eligibleOtherPilots(allSeatedIds, excludeIds);
+
+    // The task's resolved minimum (never a hardcoded "4"/"6", Safeguard 7);
+    // one seat is the entitled pilot, so min - 1 fillers are drawn.
+    const min = task.minGroupSize ?? 1;
+    const fillerCount = Math.max(0, min - 1);
+    const fillers: string[] = [];
+    const remaining = [...pool];
+    for (let i = 0; i < fillerCount && remaining.length > 0; i++) {
+      const index = crypto.randomInt(remaining.length);
+      fillers.push(remaining.splice(index, 1)[0]!);
+    }
+
+    const reflightGroupFlyingOrder = Math.max(0, ...effective.map((g) => g.flyingOrder)) + 1;
+    const payload: ReflightPreparedPayload = {
+      competitionId,
+      drawId: accepted.id,
+      roundNumber: parsed.roundNumber,
+      taskId: resolvedTaskId,
+      taskName: task.name,
+      entitledRosterEntryId: parsed.entitledRosterEntryId,
+      reflightGroupFlyingOrder,
+      fillerRosterEntryIds: fillers,
+      approvalStatus: "pending-contest-director-approval",
+      reason: parsed.reason,
+    };
+    const record = this.eventStore.append({
+      scope: competitionId,
+      type: "draw.reflightPrepared",
+      payload,
+      attribution,
+    });
+    this.projection.apply(record);
+    return payload;
+  }
+
+  // The effective-groups read view for one task across every round of the
+  // accepted draw (defaults taskId to model.tasks[0].id, same idiom as every
+  // other task-scoped entry point here).
+  getEffectiveGroups(competitionId: string, taskId?: string): EffectiveGroupsView {
+    const competition = this.getCompetition(competitionId);
+    const model = this.getModel(competition);
+    const accepted = this.projection.getAccepted(competitionId);
+    if (!accepted) {
+      throw new DrawNotAcceptedError(
+        `Competition ${competitionId} has no accepted draw`,
+      );
+    }
+    const { task, resolvedTaskId } = this.resolveTask(model, taskId);
+    return this.buildEffectiveGroupsView(competitionId, accepted.id, resolvedTaskId, task.name);
+  }
+
+  // Resolve the requested taskId against the model, defaulting to
+  // model.tasks[0].id (single-task classes never see a selector) — the exact
+  // idiom STORY-001-020 established for per-task requests.
+  private resolveTask(
+    model: ContestClassModel,
+    requestedTaskId: string | undefined,
+  ): { task: TaskParameterSet; resolvedTaskId: string } {
+    const resolvedTaskId = requestedTaskId ?? model.tasks[0]!.id;
+    const task = model.tasks.find((t) => t.id === resolvedTaskId);
+    if (!task) {
+      throw new GroupMoveTargetNotFoundError(`Task ${resolvedTaskId} not found on this class model`);
+    }
+    return { task, resolvedTaskId };
+  }
+
+  // AC2: reuses STORY-001-009's no-back-to-back rule verbatim — a seat must
+  // not end up in the last group of round r AND the first group of round
+  // r+1. Checked in both directions against the destination's position:
+  // moving into the round's last group checks round r+1's first group;
+  // moving into the round's first group checks round r-1's last group.
+  private assertNoConsecutiveFlightClash(
+    competitionId: string,
+    taskId: string,
+    taskName: string,
+    roundNumber: number,
+    rosterEntryId: string,
+    destinationFlyingOrder: number,
+    groupCountThisRound: number,
+  ): void {
+    const isLastGroup = destinationFlyingOrder === groupCountThisRound;
+    const isFirstGroup = destinationFlyingOrder === 1;
+
+    if (isLastGroup) {
+      const nextRoundGroups = this.projection.getEffectiveGroups(competitionId, roundNumber + 1, taskId);
+      const inFirstGroupNextRound = nextRoundGroups.some(
+        (g) => g.flyingOrder === 1 && g.members.some((m) => m.rosterEntryId === rosterEntryId),
+      );
+      if (inFirstGroupNextRound) {
+        throw new GroupMoveClashError(
+          `consecutive-flight: moving into round ${roundNumber}'s last group of ${taskName} would place this pilot in the last group of round ${roundNumber} and the first group of round ${roundNumber + 1}, violating the no-back-to-back constraint`,
+        );
+      }
+    }
+    if (isFirstGroup) {
+      const prevRoundGroups = this.projection.getEffectiveGroups(competitionId, roundNumber - 1, taskId);
+      const lastFlyingOrderPrev = Math.max(0, ...prevRoundGroups.map((g) => g.flyingOrder));
+      const inLastGroupPrevRound = prevRoundGroups.some(
+        (g) => g.flyingOrder === lastFlyingOrderPrev && g.members.some((m) => m.rosterEntryId === rosterEntryId),
+      );
+      if (inLastGroupPrevRound) {
+        throw new GroupMoveClashError(
+          `consecutive-flight: moving into round ${roundNumber}'s first group of ${taskName} would place this pilot in the last group of round ${roundNumber - 1} and the first group of round ${roundNumber}, violating the no-back-to-back constraint`,
+        );
+      }
+    }
+  }
+
+  // The EffectiveGroupsView read shape shared by moveGroup/splitGroup/
+  // getEffectiveGroups: every round of the accepted draw, this task's
+  // effective groups, and which of them are re-flyer groups.
+  private buildEffectiveGroupsView(
+    competitionId: string,
+    drawId: string,
+    taskId: string,
+    taskName: string,
+  ): EffectiveGroupsView {
+    const accepted = this.projection.getAccepted(competitionId);
+    const reflightPreparations = this.projection
+      .getReflightPreparations(competitionId)
+      .filter((p) => p.taskId === taskId);
+    const rounds: EffectiveRound[] = (accepted?.rounds ?? []).map((round) => {
+      const groups = this.projection.getEffectiveGroups(competitionId, round.roundNumber, taskId);
+      const reflightFlyingOrdersThisRound = new Set(
+        reflightPreparations
+          .filter((p) => p.roundNumber === round.roundNumber)
+          .map((p) => p.reflightGroupFlyingOrder),
+      );
+      return {
+        roundNumber: round.roundNumber,
+        groups,
+        reflightGroupFlags: groups.map((g) => reflightFlyingOrdersThisRound.has(g.flyingOrder)),
+      };
+    });
+    return { drawId, taskId, taskName, rounds };
   }
 
   // ---- cross-aggregate resolution ---------------------------------------

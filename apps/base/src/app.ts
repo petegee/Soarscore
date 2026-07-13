@@ -36,7 +36,6 @@ import { TemplateService } from "./templates/service.js";
 import { TemplateNotFoundError } from "./templates/errors.js";
 import { RosterProjection } from "./roster/projection.js";
 import {
-  NoEntryScoresYetProvider,
   NothingRetiredProvider,
   type DrawStateProvider,
   type EntryScoresProvider,
@@ -73,11 +72,26 @@ import {
   DrawCandidateSupersededError,
   DrawGenerationFailedError,
   DrawGroupSizeWarningUnacknowledgedError,
+  DrawNotAcceptedError,
   DrawSpecNotFoundError,
+  GroupMoveClashError,
+  GroupMoveTargetNotFoundError,
   GroupSizeOutOfBoundsError,
+  GroupSplitInvalidError,
+  ReflightEntitlementNotFoundError,
 } from "./draw/errors.js";
 import { ProjectionDrawStateProvider } from "./draw/draw-state-provider.js";
+import { DrawServiceGroupCompositionProvider } from "./draw/group-composition-provider.js";
 import { registerDrawRoutes } from "./routes/draw.js";
+import { ScoringProjection } from "./scoring/projection.js";
+import { ScoringService } from "./scoring/service.js";
+import {
+  AnnulmentOverridePendingError,
+  CaptureTargetNotFoundError,
+  LonePilotAlreadyResolvedError,
+} from "./scoring/errors.js";
+import { ProjectionEntryScoresProvider } from "./scoring/entry-scores-provider.js";
+import { registerScoringRoutes } from "./routes/scoring.js";
 import { registerHealthRoute } from "./routes/health.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -136,6 +150,13 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // D4) — rebuilt from the log on init, filed under scope = competitionId.
   const drawProjection = new DrawProjection();
   drawProjection.rebuild(eventStore.readAll());
+  // Scoring projection (STORY-001-011): captured results + lone-pilot/
+  // annulment resolutions, also a pure loader, filed under
+  // scope = competitionId. Constructed after DrawProjection — scoring reads
+  // through the draw-composition interface, so draw must exist first
+  // (matching the existing ordering discipline).
+  const scoringProjection = new ScoringProjection();
+  scoringProjection.rebuild(eventStore.readAll());
 
   const pilotService = new PilotService(
     eventStore,
@@ -191,7 +212,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // module (no cycle). NoAcceptedDrawProvider remains the tests' seam.
     options.drawStateProvider ?? new ProjectionDrawStateProvider(drawProjection),
     options.retirementStateProvider ?? new NothingRetiredProvider(),
-    options.entryScoresProvider ?? new NoEntryScoresYetProvider(),
+    // Real provider (STORY-001-011): answers from the scoring projection's
+    // genuinely captured results — never mere draw membership. Lives on the
+    // scoring side and is injected here so the roster module never imports
+    // the scoring module (no cycle). NoEntryScoresYetProvider remains the
+    // tests' seam.
+    options.entryScoresProvider ?? new ProjectionEntryScoresProvider(scoringProjection),
   );
 
   // Task-config reads defaults from the class model and overlays per-event
@@ -216,6 +242,22 @@ export function buildApp(options: AppOptions): FastifyInstance {
     rosterProjection,
   );
 
+  // Scoring (STORY-001-011): capture one raw result per pilot per round/task,
+  // and recompute an official group score on demand (which-score-counts,
+  // lone-pilot dummy insertion, F3B annulment). Depends on the draw module
+  // only through the GroupCompositionProvider interface it owns — the
+  // concrete draw-side implementation is wired in here, so neither module
+  // imports the other (no cycle, Safeguard 9).
+  const groupCompositionProvider = new DrawServiceGroupCompositionProvider(drawProjection);
+  const scoringService = new ScoringService(
+    eventStore,
+    scoringProjection,
+    classModelProjection,
+    competitionProjection,
+    groupCompositionProvider,
+    rosterProjection,
+  );
+
   registerHealthRoute(app);
   registerPilotRoutes(app, pilotService);
   registerClassModelRoutes(app, classModelService);
@@ -224,6 +266,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   registerRosterRoutes(app, rosterService);
   registerTaskConfigRoutes(app, taskConfigService);
   registerDrawRoutes(app, drawService);
+  registerScoringRoutes(app, scoringService);
 
   if (options.serveStatic) {
     app.register(fastifyStatic, {
@@ -371,6 +414,26 @@ export function buildApp(options: AppOptions): FastifyInstance {
       return;
     }
     if (error instanceof DrawGroupSizeWarningUnacknowledgedError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof DrawNotAcceptedError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof GroupMoveTargetNotFoundError || error instanceof ReflightEntitlementNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof GroupMoveClashError || error instanceof GroupSplitInvalidError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof CaptureTargetNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof LonePilotAlreadyResolvedError || error instanceof AnnulmentOverridePendingError) {
       reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }

@@ -1,4 +1,12 @@
-import type { DrawAcceptedPayload, DrawSpecification, GeneratedDraw } from "@soarscore/shared";
+import type {
+  DrawAcceptedPayload,
+  DrawSpecification,
+  FlightGroup,
+  GeneratedDraw,
+  GroupMovedPayload,
+  GroupSplitPayload,
+  ReflightPreparedPayload,
+} from "@soarscore/shared";
 import type { EventRecord } from "../eventstore/event-store.js";
 
 // One projection for all competitions' draws — derived state only (D4/D7), safe
@@ -16,6 +24,15 @@ export class DrawProjection {
   private specs = new Map<string, DrawSpecification>();
   private candidates = new Map<string, GeneratedDraw>();
   private accepted = new Map<string, GeneratedDraw>();
+  // STORY-001-011: the latest effective group set for one (round, task) once
+  // at least one move/split/re-flight-prepare has happened for that key —
+  // "latest overlay wins", never a rewrite of the stored draw.accepted
+  // payload. Outer key competitionId; inner key `${roundNumber}|${taskId}`.
+  private groupTopologyOverlay = new Map<string, Map<string, FlightGroup[]>>();
+  // Every re-flight preparation recorded for a competition, append-only
+  // (never superseded within this story's surface — a future CD-approval
+  // story supersedes with its own event, not an edit here).
+  private reflightPreparations = new Map<string, ReflightPreparedPayload[]>();
 
   apply(record: EventRecord): void {
     switch (record.type) {
@@ -52,12 +69,85 @@ export class DrawProjection {
         this.candidates.delete(record.scope);
         break;
       }
+      case "draw.groupMoved": {
+        // AC1: move one seat between two groups of the same round/task.
+        // Recompute the affected key's full group set from the *current*
+        // effective composition (accepted snapshot, or the prior overlay
+        // entry if one already exists) and supersede the overlay's latest
+        // value — never patch a group in place (same discipline as every
+        // other supersede-on-repeat fact in this file).
+        const payload = record.payload as GroupMovedPayload;
+        const next = this.deepCopyGroups(
+          this.currentGroupsFor(record.scope, payload.roundNumber, payload.taskId),
+        );
+        const fromGroup = next.find((g) => g.flyingOrder === payload.fromGroupFlyingOrder);
+        const toGroup = next.find((g) => g.flyingOrder === payload.toGroupFlyingOrder);
+        if (fromGroup && toGroup) {
+          const index = fromGroup.members.findIndex((m) => m.rosterEntryId === payload.rosterEntryId);
+          if (index >= 0) {
+            const [member] = fromGroup.members.splice(index, 1);
+            toGroup.members.push(member!);
+            fromGroup.lonePilotFlagged = fromGroup.members.length === 1;
+            toGroup.lonePilotFlagged = toGroup.members.length === 1;
+          }
+        }
+        this.setOverlay(record.scope, payload.roundNumber, payload.taskId, next);
+        break;
+      }
+      case "draw.groupSplit": {
+        // AC1: carve movedRosterEntryIds out of the source group into a
+        // freshly appended group at newGroupFlyingOrder.
+        const payload = record.payload as GroupSplitPayload;
+        const next = this.deepCopyGroups(
+          this.currentGroupsFor(record.scope, payload.roundNumber, payload.taskId),
+        );
+        const source = next.find((g) => g.flyingOrder === payload.sourceGroupFlyingOrder);
+        if (source) {
+          const moving = source.members.filter((m) => payload.movedRosterEntryIds.includes(m.rosterEntryId));
+          source.members = source.members.filter(
+            (m) => !payload.movedRosterEntryIds.includes(m.rosterEntryId),
+          );
+          source.lonePilotFlagged = source.members.length === 1;
+          next.push({
+            flyingOrder: payload.newGroupFlyingOrder,
+            members: moving,
+            lonePilotFlagged: moving.length === 1,
+          });
+        }
+        this.setOverlay(record.scope, payload.roundNumber, payload.taskId, next);
+        break;
+      }
+      case "draw.reflightPrepared": {
+        // AC3/AC4: record the preparation, and synthesize the new re-flyer
+        // group into the overlay — structurally a split-off group whose
+        // membership is [entitled, ...fillers]. The entitled pilot and every
+        // filler keep their original-group membership too (a re-flight is an
+        // *extra* flight opportunity, not a seat move — Approach §3).
+        const payload = record.payload as ReflightPreparedPayload;
+        const preparations = this.reflightPreparations.get(record.scope) ?? [];
+        preparations.push({ ...payload, fillerRosterEntryIds: [...payload.fillerRosterEntryIds] });
+        this.reflightPreparations.set(record.scope, preparations);
+
+        const next = this.deepCopyGroups(
+          this.currentGroupsFor(record.scope, payload.roundNumber, payload.taskId),
+        );
+        const memberIds = [payload.entitledRosterEntryId, ...payload.fillerRosterEntryIds];
+        next.push({
+          flyingOrder: payload.reflightGroupFlyingOrder,
+          members: memberIds.map((rosterEntryId, i) => ({ rosterEntryId, lane: i + 1 })),
+          lonePilotFlagged: memberIds.length === 1,
+        });
+        this.setOverlay(record.scope, payload.roundNumber, payload.taskId, next);
+        break;
+      }
       case "competition.deleted": {
         if (record.scope !== "competitions") break;
         const payload = record.payload as { competitionId: string };
         this.specs.delete(payload.competitionId);
         this.candidates.delete(payload.competitionId);
         this.accepted.delete(payload.competitionId);
+        this.groupTopologyOverlay.delete(payload.competitionId);
+        this.reflightPreparations.delete(payload.competitionId);
         break;
       }
       default:
@@ -69,6 +159,8 @@ export class DrawProjection {
     this.specs = new Map();
     this.candidates = new Map();
     this.accepted = new Map();
+    this.groupTopologyOverlay = new Map();
+    this.reflightPreparations = new Map();
     for (const event of events) {
       this.apply(event);
     }
@@ -93,6 +185,53 @@ export class DrawProjection {
   // an *accepted* draw, never mere candidate existence.
   hasAccepted(competitionId: string): boolean {
     return this.accepted.has(competitionId);
+  }
+
+  // STORY-001-011: the effective group composition for one round/task — the
+  // overlay's latest value if any move/split/re-flight has touched this key,
+  // else the accepted draw's stored groups, else [] if no draw is accepted.
+  // Deep-copy on return (matches every other getter's discipline).
+  getEffectiveGroups(competitionId: string, roundNumber: number, taskId: string): FlightGroup[] {
+    return this.deepCopyGroups(this.currentGroupsFor(competitionId, roundNumber, taskId));
+  }
+
+  getReflightPreparations(competitionId: string): ReflightPreparedPayload[] {
+    return (this.reflightPreparations.get(competitionId) ?? []).map((p) => ({
+      ...p,
+      fillerRosterEntryIds: [...p.fillerRosterEntryIds],
+    }));
+  }
+
+  // Pure replay only (no RNG, no clash-checking) — the overlay value if
+  // present, else the accepted draw's stored groups for that round/task, else
+  // []. Not deep-copied — callers that mutate (apply's own branches above)
+  // deep-copy first via deepCopyGroups; getters deep-copy on the way out.
+  private currentGroupsFor(competitionId: string, roundNumber: number, taskId: string): FlightGroup[] {
+    const key = `${roundNumber}|${taskId}`;
+    const overlay = this.groupTopologyOverlay.get(competitionId)?.get(key);
+    if (overlay) return overlay;
+    const accepted = this.accepted.get(competitionId);
+    const round = accepted?.rounds.find((r) => r.roundNumber === roundNumber);
+    const taskGroups = round?.taskGroups.find((tg) => tg.taskId === taskId);
+    return taskGroups?.groups ?? [];
+  }
+
+  private setOverlay(competitionId: string, roundNumber: number, taskId: string, groups: FlightGroup[]): void {
+    const key = `${roundNumber}|${taskId}`;
+    let forCompetition = this.groupTopologyOverlay.get(competitionId);
+    if (!forCompetition) {
+      forCompetition = new Map();
+      this.groupTopologyOverlay.set(competitionId, forCompetition);
+    }
+    forCompetition.set(key, groups);
+  }
+
+  private deepCopyGroups(groups: FlightGroup[]): FlightGroup[] {
+    return groups.map((g) => ({
+      flyingOrder: g.flyingOrder,
+      lonePilotFlagged: g.lonePilotFlagged,
+      members: g.members.map((m) => ({ rosterEntryId: m.rosterEntryId, lane: m.lane })),
+    }));
   }
 
   private copySpec(spec: DrawSpecification): DrawSpecification {

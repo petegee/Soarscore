@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   computeFinalAggregate,
   deriveRoundScore,
+  eligibleOtherPilots,
   normaliseGroup,
+  selectOfficialResult,
   type AggregateInput,
   type GroupEntry,
+  type GroupEntryWithResults,
   type NormaliseOptions,
 } from "./scoring.js";
 
@@ -209,6 +212,64 @@ describe("computeFinalAggregate — drop-worst boundary", () => {
     expect(result.droppedValues).toEqual([]);
     expect(result.grossBeforePenalty).toBe(0);
     expect(result.aggregate).toBe(0);
+  });
+});
+
+describe("selectOfficialResult — STORY-001-011 AC5 which-score-counts", () => {
+  it("no results → 0", () => {
+    expect(selectOfficialResult({ rosterEntryId: "a", results: [] }, false, false)).toBe(0);
+  });
+
+  it("one result → that result's raw", () => {
+    const entry: GroupEntryWithResults = {
+      rosterEntryId: "a",
+      results: [{ raw: 850, resultKind: "original" }],
+    };
+    expect(selectOfficialResult(entry, false, false)).toBe(850);
+  });
+
+  it("entitled pilot with two results counts the reflight, even if worse", () => {
+    const entry: GroupEntryWithResults = {
+      rosterEntryId: "john",
+      results: [
+        { raw: 850, resultKind: "original" },
+        { raw: 790, resultKind: "reflight" },
+      ],
+    };
+    expect(selectOfficialResult(entry, true, false)).toBe(790);
+  });
+
+  it("non-entitled pilot with two results counts the better one (non-inverted)", () => {
+    const entry: GroupEntryWithResults = {
+      rosterEntryId: "jane",
+      results: [
+        { raw: 920, resultKind: "original" },
+        { raw: 960, resultKind: "reflight" },
+      ],
+    };
+    expect(selectOfficialResult(entry, false, false)).toBe(960);
+  });
+
+  it("non-entitled pilot with two results counts the better one (speed-inverted — lower wins)", () => {
+    const entry: GroupEntryWithResults = {
+      rosterEntryId: "jane",
+      results: [
+        { raw: 45.2, resultKind: "original" },
+        { raw: 44.9, resultKind: "reflight" },
+      ],
+    };
+    expect(selectOfficialResult(entry, false, true)).toBe(44.9);
+  });
+});
+
+describe("eligibleOtherPilots — the shared exclusion filter", () => {
+  it("excludes every id in excludeIds and keeps the rest", () => {
+    const result = eligibleOtherPilots(["a", "b", "c", "d"], new Set(["a", "c"]));
+    expect(result).toEqual(["b", "d"]);
+  });
+
+  it("returns [] when everyone is excluded", () => {
+    expect(eligibleOtherPilots(["a", "b"], new Set(["a", "b"]))).toEqual([]);
   });
 });
 
