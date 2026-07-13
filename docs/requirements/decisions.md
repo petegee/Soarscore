@@ -90,7 +90,7 @@ missing scores, and overrides entered scores known to be incorrect.
 - Blank **scoring sheets must be printable in advance** of any round, as the
   standing fallback kit ([7.3](high-level-requirements.md#area-7--reports)).
 - A **CD end-of-contest validation pass gates Lock**
-  ([2.2](high-level-requirements.md#area-2--competition-lifecycle)).
+  ([2.3](high-level-requirements.md#area-2--competition-lifecycle)).
 
 ## D4 — Immutable event log
 
@@ -167,7 +167,7 @@ returns**. A live-scoring public web page for real-time contest progress is a
 A typical event is **single-day or two-day**, with **up to 20 pilots** and
 **up to ~8 rounds per day**. Two-day events are routine, so **suspend at end
 of day / resume next day is MVP scope**
-([2.3](high-level-requirements.md#area-2--competition-lifecycle)). These
+([2.4](high-level-requirements.md#area-2--competition-lifecycle)). These
 bounds size everything: device fleet ≈ max group size plus spares, report
 volumes are small, draw computation is trivial at this scale.
 

@@ -58,13 +58,131 @@ is shared across all of them.
 
 ## Area 2 — Competition Lifecycle
 
-Managing whole competitions as objects.
+Managing whole competitions as objects. The
+[lifecycle state machine](#competition-lifecycle-state-machine) below is
+**authoritative** for a competition's states and the transitions between them;
+the 2.1–2.4 sub-areas describe the *actions*, the state machine defines *when
+each is legal*.
 
 | Sub-area | Description |
 |---|---|
-| 2.1 Create / Open / Delete | Basic lifecycle actions over competitions. |
-| 2.2 Lock | Freeze a competition against further changes while keeping reports available. **Preceded by the Contest Director's end-of-contest validation pass** ([decisions.md D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)): review flagged anomalies ([5.6](#area-5--scoring)), enter missing scores and override known-incorrect ones via manual entry ([5.8](#area-5--scoring)), then lock. **Contest ended early (minimum-rounds validity):** a contest may be locked at any round count, but if the completed rounds fall **short of the class rules' minimum for a valid contest** (per the [per-class rule docs](rules/) — 4 rounds for F3J/F5J/F5L, 5 for F3K, 1 round + 1 task for F3B; **F5K defines no minimum** — there, finalising short is the Contest Director's judgement), it is finalised as a **no-contest**: locked with **no official results** produced, the captured data and event log retained. Where the minimum **is** met, final reports state the rounds flown, and drop-worst applies only past its class threshold ([general-rules §5](rules/00-general-rules.md#5-final-classification-common)). |
-| 2.3 Suspend / Resume | Suspend a competition at end of day and resume the next day — two-day events are routine ([decisions.md D7](decisions.md#d7--scale-bounds-and-multi-day-operation)). Contest state (completed rounds, scores, draw position, round-in-progress status) carries over intact. **Suspend is allowed at any group boundary, including mid-round** (some groups flown, scores incomplete) — the system warns when suspending mid-round but does not block it; on resume the round simply continues. Scorer self-correction is **group-bounded** ([decisions.md D11](decisions.md#d11--the-devices-scope-is-the-current-group)), so suspension (always at a group boundary) never truncates it; changes to already-flown groups remain available on resume as base-side score administration ([5.3](#area-5--scoring)/[5.4](#area-5--scoring)). |
+| 2.1 Create / Open / Delete | Basic lifecycle actions over competitions. Create enters **Setup**; Delete is legal from Setup only ([state machine](#competition-lifecycle-state-machine)). |
+| 2.2 Start Proceedings | The **Contest Director** officially opens competition proceedings, transitioning the competition from **setup** to **running** — the deliberate begin-boundary that mirrors [2.3 Lock](#area-2--competition-lifecycle)'s close-boundary, distinct from the Announcer/Timekeeper's operational start of the first round/group ([6.4](#area-6--display-timer--audio-field-aids)/[6.5](#area-6--display-timer--audio-field-aids); [decisions.md D10](decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)). **Readiness-gated (hard block):** the competition **cannot** be started until its roster is complete ([3.4](#area-3--competition-setup--configuration)) and its draw has been generated **and accepted** ([4.3](#area-4--draw--rounds-generation)); a blocked start **lists its outstanding items**. (The softer roster-size judgements are already resolved upstream at draw time — a too-thin roster warns and requires Contest-Director acknowledgement *there* ([4.1](#area-4--draw--rounds-generation), [decisions.md D14](decisions.md#d14--rule-fixed-group-size-minima-are-advisory-warn-and-require-override)) — so once a draw is *accepted* the Start gate needs no override.) Starting is recorded in the event log ([decisions.md D4](decisions.md#d4--immutable-event-log)) and **marks the boundary past which configuration changes require Contest-Director authority** (see [Area 3](#area-3--competition-setup--configuration)). No group or round may be run ([Area 6](#area-6--display-timer--audio-field-aids)) until proceedings are open. Fires only from the *DrawAccepted* state ([state machine](#competition-lifecycle-state-machine)). |
+| 2.3 Lock | Freeze a competition against further changes while keeping reports available. **Preceded by the Contest Director's end-of-contest validation pass** ([decisions.md D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)): review flagged anomalies ([5.6](#area-5--scoring)), enter missing scores and override known-incorrect ones via manual entry ([5.8](#area-5--scoring)), then lock. **Contest ended early (minimum-rounds validity):** a contest may be locked at any round count, but if the completed rounds fall **short of the class rules' minimum for a valid contest** (per the [per-class rule docs](rules/) — 4 rounds for F3J/F5J/F5L, 5 for F3K, 1 round + 1 task for F3B; **F5K defines no minimum** — there, finalising short is the Contest Director's judgement), it is finalised as a **no-contest**: locked with **no official results** produced, the captured data and event log retained. Where the minimum **is** met, final reports state the rounds flown, and drop-worst applies only past its class threshold ([general-rules §5](rules/00-general-rules.md#5-final-classification-common)). Reached from *BetweenGroups*; the minimum-rounds guard resolves to *OfficialResults* or *NoContest* ([state machine](#competition-lifecycle-state-machine)). |
+| 2.4 Suspend / Resume | Suspend a competition at end of day and resume the next day — two-day events are routine ([decisions.md D7](decisions.md#d7--scale-bounds-and-multi-day-operation)). Contest state (completed rounds, scores, draw position, round-in-progress status) carries over intact. **Suspend is allowed at any group boundary, including mid-round** (some groups flown, scores incomplete) — the system warns when suspending mid-round but does not block it; on resume the round simply continues. Scorer self-correction is **group-bounded** ([decisions.md D11](decisions.md#d11--the-devices-scope-is-the-current-group)), so suspension (always at a group boundary) never truncates it; changes to already-flown groups remain available on resume as base-side score administration ([5.3](#area-5--scoring)/[5.4](#area-5--scoring)). Leaves and re-enters at *BetweenGroups* ([state machine](#competition-lifecycle-state-machine)). |
+
+### Competition lifecycle state machine
+
+The authoritative model of a competition's states and the legal transitions
+between them. **Setup** and **Running** are composite states; the diagram is the
+single source of truth for *when* each 2.1–2.4 action is legal, while the
+nested phase states inside **Running** defer to [Area 6](#area-6--display-timer--audio-field-aids)
+for what happens *within* a phase (the state machine owns the states and edges;
+Area 6 owns the in-phase behaviour). The two `<<choice>>` branches are guards:
+task-type at group entry, and minimum-rounds validity at lock.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Setup: Create (2.1)
+
+    state Setup {
+        [*] --> Draft
+        Draft --> RosterComplete: roster built (3.4)
+        RosterComplete --> Draft: edit roster
+        RosterComplete --> DrawSpecified: draw spec set (4.1)
+        DrawSpecified --> DrawGenerated: generate draw (4.2)
+        DrawGenerated --> DrawSpecified: edit spec
+        DrawGenerated --> RosterComplete: edit roster (3.4)
+        DrawGenerated --> DrawAccepted: CD accepts (4.3)
+        DrawAccepted --> DrawGenerated: re-draw (4.3)
+        DrawAccepted --> RosterComplete: edit roster / spec (3.4)
+
+        DrawSpecified: DrawSpecified · no-draw
+        DrawGenerated: DrawGenerated · awaiting-decision
+        DrawAccepted: DrawAccepted / READY · accepted
+    }
+
+    state Running {
+        [*] --> BetweenGroups
+        BetweenGroups --> BetweenGroups: advance round (6.4)
+        BetweenGroups --> GroupInProgress: start group (6.5)
+        GroupInProgress --> BetweenGroups: group scored
+
+        state GroupInProgress {
+            state pick <<choice>>
+            [*] --> pick
+            pick --> Preparation: duration task
+            pick --> ManualRun: manual-run task
+            Preparation --> WorkingTime
+            WorkingTime --> LandingWindow
+            LandingWindow --> [*]
+            ManualRun --> [*]
+            WorkingTime --> Preparation: CD abort/restart (6.5)
+            LandingWindow --> Preparation: CD abort/restart (6.5)
+
+            Preparation: Preparation · 6.1/6.5
+            WorkingTime: Working Time · 6.1
+            LandingWindow: Landing Window · 6.1
+            ManualRun: Manual-run · D10
+        }
+    }
+
+    DrawAccepted --> Running: Start Proceedings (2.2)
+    Setup --> Deleted: Delete (2.1)
+
+    BetweenGroups --> Suspended: Suspend (2.4)
+    Suspended --> BetweenGroups: Resume (2.4)
+    BetweenGroups --> Locked: Lock (2.3)
+
+    state Locked {
+        state met <<choice>>
+        [*] --> met
+        met --> OfficialResults: rounds >= class min
+        met --> NoContest: rounds < class min
+    }
+
+    Locked --> [*]
+    Deleted --> [*]
+```
+
+**States.**
+
+| State | Kind | Meaning |
+|---|---|---|
+| **Setup** | composite | Competition exists; identity, config, roster and draw are all mutable with no Contest-Director authority required. Its sub-states track readiness for [2.2 Start](#area-2--competition-lifecycle). |
+| — *Draft* | sub | Created ([3.1](#area-3--competition-setup--configuration)); identity and discipline captured, entry options and roster in progress. |
+| — *RosterComplete* | sub | Roster built ([3.4](#area-3--competition-setup--configuration)); no draw yet (`no-draw`). |
+| — *DrawSpecified* | sub | Draw spec set ([4.1](#area-4--draw--rounds-generation)); no groups generated (`no-draw`). |
+| — *DrawGenerated* | sub | Candidate groups produced ([4.2](#area-4--draw--rounds-generation)), awaiting the Contest Director's decision (`awaiting-decision`). |
+| — *DrawAccepted / READY* | sub | Draw accepted ([4.3](#area-4--draw--rounds-generation)) with roster complete (`accepted`); the [2.2 Start](#area-2--competition-lifecycle) gate is satisfied. |
+| **Running** | composite | Proceedings open; groups and rounds run ([Area 6](#area-6--display-timer--audio-field-aids)), scores capture ([Area 5](#area-5--scoring)), and configuration changes require Contest-Director authority ([Area 3](#area-3--competition-setup--configuration)). |
+| — *BetweenGroups* | sub | The idle group boundary: no live group. The **only** state from which Suspend, Lock and round-advance are reachable. |
+| — *GroupInProgress* | sub (composite) | A group is current and devices capture. Duration-shaped tasks run Preparation → Working Time → Landing Window; manual-run tasks ([D10](decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)) are current with no automated clock. Phase behaviour is defined by [Area 6](#area-6--display-timer--audio-field-aids). |
+| **Suspended** | simple | Paused at a group boundary between days ([2.4](#area-2--competition-lifecycle)); full state carried over. Resumes to *BetweenGroups*. |
+| **Locked** | composite | Frozen; reports remain available ([2.3](#area-2--competition-lifecycle)). Resolves by the minimum-rounds guard to *OfficialResults* or *NoContest*. Terminal. |
+| **Deleted** | simple | Removed ([2.1](#area-2--competition-lifecycle)). Terminal. |
+
+**Transitions & guards.**
+
+| From → To | Trigger | Guard |
+|---|---|---|
+| *(start)* → Setup | Create ([2.1](#area-2--competition-lifecycle)) | — |
+| Setup → Deleted | Delete ([2.1](#area-2--competition-lifecycle)) | — |
+| DrawAccepted → Running | **Start Proceedings** ([2.2](#area-2--competition-lifecycle)) | **hard block:** roster complete ∧ draw accepted (i.e. must be in *DrawAccepted*) |
+| BetweenGroups → GroupInProgress | Start group ([6.5](#area-6--display-timer--audio-field-aids)) | operator action; pilots confirmed via the prep gate ([5.0](#area-5--scoring)) |
+| GroupInProgress → BetweenGroups | Group scored | every device in the group has captured |
+| WorkingTime / LandingWindow → Preparation | CD abort/restart ([6.5](#area-6--display-timer--audio-field-aids)) | annuls accumulated times/metrics for the group |
+| BetweenGroups → BetweenGroups | Advance round ([6.4](#area-6--display-timer--audio-field-aids)) | round complete, **or** CD "advance anyway" override |
+| BetweenGroups → Suspended | Suspend ([2.4](#area-2--competition-lifecycle)) | group boundary only; warns if mid-round |
+| Suspended → BetweenGroups | Resume ([2.4](#area-2--competition-lifecycle)) | — |
+| BetweenGroups → Locked | Lock ([2.3](#area-2--competition-lifecycle)) | preceded by the CD end-of-contest validation pass ([D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)) |
+| Locked → OfficialResults / NoContest | *(guard branch)* | rounds ≥ class minimum → official results; else no-contest |
+
+Editing roster or draw spec inside **Setup** falls back toward the left — a draw
+cannot survive a change to its inputs ([3.4](#area-3--competition-setup--configuration)
+"replace entrants after the draw"). Suspend, Lock and round-advance leave only
+from **BetweenGroups**, never mid-group, which is what makes suspension
+group-boundary-safe and round-advance completeness-gated.
 
 ---
 
@@ -72,7 +190,8 @@ Managing whole competitions as objects.
 
 Everything that defines how a specific competition scores and runs.
 
-**Mid-contest configuration changes.** Once the first round has started, any
+**Mid-contest configuration changes.** Once proceedings have started
+([2.2](#area-2--competition-lifecycle)), any
 change to configuration that affects scoring or running (3.5–3.8) requires
 **Contest Director authority** and is recorded in the event log
 ([decisions.md D4](decisions.md#d4--immutable-event-log)). Before applying a
@@ -152,7 +271,7 @@ belongs to the **Announcer / Timekeeper**
 | 5.5 Pilot Retirement | Retire a pilot and re-draw remaining rounds to exclude them; reinstate if needed. |
 | 5.6 Score Validation | Flag outlier/missing scores against configurable limits, per pilot or overall. |
 | 5.7 No-Score Resolution | Handle a competitor who did **not fly** their group — a Scorer marked *cannot make the group* ([5.0](#area-5--scoring)), or the [Contest Director released the prep gate for an **unconfirmed pilot**](#area-6--display-timer--audio-field-aids) ([6.5](#area-6--display-timer--audio-field-aids); the **device-offline** release form applies no no-score). A **no-score** is distinct from a **zero**: it means *did not fly*, not *flew and scored zero*. The pilot is expected to still fly the round via a [pilot-readiness group move](#area-5--scoring) ([5.3](#area-5--scoring)) into a later group; a no-score **auto-converts to a zero at round end** only if no groups remain in the round for them to fly. An unresolved no-score is an outstanding item against **round completeness** — the round cannot advance ([6.4](#area-6--display-timer--audio-field-aids)) while a no-scored pilot could still be moved into a remaining group. |
-| 5.8 Manual Entry & Paper Fallback | Bulk score entry into the Base Station, per group and round, for any task type — operated through the companion app ([companion-app.md §3.5](companion-app.md#35-manual-entry-and-the-paper-fallback--any-operator-58-d3)); the base is headless. This is the entry path when the field reverts to **pen and paper** after a device or system failure ([decisions.md D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)), and the mechanism for the Contest Director's end-of-contest corrections that gate Lock ([2.2](#area-2--competition-lifecycle)). Blank scoring sheets are printable **in advance** of any round ([7.3](#area-7--reports)) so the paper fallback is always ready. |
+| 5.8 Manual Entry & Paper Fallback | Bulk score entry into the Base Station, per group and round, for any task type — operated through the companion app ([companion-app.md §3.5](companion-app.md#35-manual-entry-and-the-paper-fallback--any-operator-58-d3)); the base is headless. This is the entry path when the field reverts to **pen and paper** after a device or system failure ([decisions.md D3](decisions.md#d3--failure-policy-pen-and-paper-reconcile-at-the-base)), and the mechanism for the Contest Director's end-of-contest corrections that gate Lock ([2.3](#area-2--competition-lifecycle)). Blank scoring sheets are printable **in advance** of any round ([7.3](#area-7--reports)) so the paper fallback is always ready. |
 | 5.9 Penalties | The **Contest Director** imposes point penalties (up to disqualification) against a pilot and the round in which the infringement occurred. Penalties are **cumulative**, deducted from the **final aggregate** (not from a group score), **retained even when their round is dropped** by the class's drop-worst rule, and a total that would go negative is recorded as **zero** with the penalties still standing ([general-rules §6](rules/00-general-rules.md#6-penalties-common)). Every imposition or revocation is recorded in the event log ([decisions.md D4](decisions.md#d4--immutable-event-log)). Distinct from the **task-integral deductions** a Scorer captures as part of the flight ([5.2](#area-5--scoring)); class-specific penalty amounts live in the per-class rule docs. |
 
 ---
@@ -179,10 +298,10 @@ apart.
 
 | Sub-area | Description |
 |---|---|
-| 6.1 Timer & Phases | Drive the group's phased countdown — **preparation**, **working time**, **landing window** — from one shared clock. Preparation and landing-window durations are per-competition ([3.8](#area-3--competition-setup--configuration)); working time is per-task ([3.7](#area-3--competition-setup--configuration)) and may differ round to round. Phases advance **automatically**: prep flows into working time, working time into the landing window. The system does **not** stop the Scorer devices' flight timing at end of working time — the Scorer times through to the model's first ground contact, past the **horn** if need be ([6.2](#area-6--display-timer--audio-field-aids); [decisions.md D5](decisions.md#d5--end-of-working-time-does-not-stop-the-device-stopwatch)/[D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)). Each flight's start/stop is **stamped on the shared clock** ([D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)), so the class rules' cap on countable flight time ([general-rules §2](rules/00-general-rules.md#2-data-the-timer--helper-collects)) is applied by the Base Station, which **derives any overfly and its magnitude from the timestamps** and lists derived overflies for the Contest Director's validation pass ([2.2](#area-2--competition-lifecycle)). |
+| 6.1 Timer & Phases | Drive the group's phased countdown — **preparation**, **working time**, **landing window** — from one shared clock. Preparation and landing-window durations are per-competition ([3.8](#area-3--competition-setup--configuration)); working time is per-task ([3.7](#area-3--competition-setup--configuration)) and may differ round to round. Phases advance **automatically**: prep flows into working time, working time into the landing window. The system does **not** stop the Scorer devices' flight timing at end of working time — the Scorer times through to the model's first ground contact, past the **horn** if need be ([6.2](#area-6--display-timer--audio-field-aids); [decisions.md D5](decisions.md#d5--end-of-working-time-does-not-stop-the-device-stopwatch)/[D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)). Each flight's start/stop is **stamped on the shared clock** ([D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock)), so the class rules' cap on countable flight time ([general-rules §2](rules/00-general-rules.md#2-data-the-timer--helper-collects)) is applied by the Base Station, which **derives any overfly and its magnitude from the timestamps** and lists derived overflies for the Contest Director's validation pass ([2.3](#area-2--competition-lifecycle)). |
 | 6.2 Audio | Spoken/audible callouts on the shared clock: announce **round and group**, then the group's **pilots** (flying order, name and pilot number) so each pilot knows if they are in this group; announce the start of **preparation**; during **working time** announce remaining time **each minute on the minute**, then **every second from −30 s to zero**, then a **loud horn** at end of working time; announce the **landing window** at its start and the **all-down** at its end. Optional additional in-working-time reminders are configurable ([3.8](#area-3--competition-setup--configuration)). Pilot names are voiced by **text-to-speech, English only** in the MVP. |
 | 6.3 Field Display Board | Big, glanceable, daylight-readable board showing the **current round and group**, the **current phase** (prep / working / landing) and the **remaining time** of that phase. (Pilot names / flying order are announced by audio, not shown on the board.) |
-| 6.4 Round Progression | Advance the contest to the next round/group — the same operator start-action at a round boundary ([decisions.md D10](decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)). **Gated by score completeness:** the next round cannot be started until every group in the previous round has all its scores captured (see [Area 5](#area-5--scoring)); an unresolved [no-score](#area-5--scoring) ([5.7](#area-5--scoring)) is likewise an outstanding item that blocks the advance, as is a **granted-but-unflown re-flight** ([5.3](#area-5--scoring) — its placement is "at the end of the ongoing round", so advancing would strand the entitlement). A blocked advance **lists its outstanding items**; only the **Contest Director's explicit, attributed "advance anyway" override** proceeds regardless — outstanding missing scores become flagged anomalies for the validation pass ([2.2](#area-2--competition-lifecycle)), unresolved no-scores convert to zero per [5.7](#area-5--scoring), and an unflown re-flight entitlement **lapses** (the original result stands, flagged for the validation pass). Operated by the Announcer/Timekeeper. |
+| 6.4 Round Progression | Advance the contest to the next round/group — the same operator start-action at a round boundary ([decisions.md D10](decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)). **Gated by score completeness:** the next round cannot be started until every group in the previous round has all its scores captured (see [Area 5](#area-5--scoring)); an unresolved [no-score](#area-5--scoring) ([5.7](#area-5--scoring)) is likewise an outstanding item that blocks the advance, as is a **granted-but-unflown re-flight** ([5.3](#area-5--scoring) — its placement is "at the end of the ongoing round", so advancing would strand the entitlement). A blocked advance **lists its outstanding items**; only the **Contest Director's explicit, attributed "advance anyway" override** proceeds regardless — outstanding missing scores become flagged anomalies for the validation pass ([2.3](#area-2--competition-lifecycle)), unresolved no-scores convert to zero per [5.7](#area-5--scoring), and an unflown re-flight entitlement **lapses** (the original result stands, flagged for the validation pass). Operated by the Announcer/Timekeeper. |
 | 6.5 Group Run Control | Start, hold and adjust a running group. **Every group start is a deliberate operator action — groups never start themselves** ([decisions.md D10](decisions.md#d10--operator-driven-progression-automation-runs-only-inside-a-group)); the **Contest Director** may **pause/resume** the preparation phase (but **not** working time or the landing window). During preparation the Director may **fast-forward** (−1 minute per invocation, never below one minute remaining) or **add time** (+1 minute per invocation). **Prep confirmation gate:** the preparation countdown pauses at one minute remaining until **every pilot in the group has exactly one confirming device** — the gate's unit is the pilot, and a confirmation is an exclusive claim ([5.0](#area-5--scoring)). The Director may override the gate in **two distinct forms**: **"release gate — device offline"** — the Scorer's device cannot deliver its confirmation ([decisions.md D6](decisions.md#d6--offline-first-buffer-and-sync-publish-when-connected)); **no no-score** is applied and the buffered confirmation reconciles on sync — and **"release gate — pilot unconfirmed"** — the pilot genuinely isn't confirmed, and takes a **no-score** ([5.7](#area-5--scoring)). To keep the two distinguishable at a glance, every device shows a **sync-state indicator** and the base's group view — displayed on a companion client ([companion-app.md §3.2](companion-app.md#32-run-control--contest-director-65)) — shows each device's state ([scorer-device.md §4](scorer-device.md#4-prep-gate-vs-an-offline-device-a1)). Working time and the landing window cannot be paused, but the Director may **abort the whole group** (e.g. a range hold) and **restart it from preparation**, annulling any times/metrics accumulated for that group. |
 
 ---

@@ -9,9 +9,10 @@ Each event is a distinct competition object with its own identity (name,
 venue, date), configuration, roster, draw and results, managed over its whole
 lifetime: created before the event, opened for work, and possibly deleted.
 Several competitions coexist (last month's event, this weekend's), so opening
-one must never leak data into another. Deleting a competition that holds real
-results is destructive and needs guarding; a competition the Contest Director
-has locked must not be deletable at all.
+one must never leak data into another. Deletion is only ever a **Setup**-stage
+action: once proceedings start the competition can no longer be deleted — it
+ends via Lock / no-contest instead — and a locked competition (terminal) is
+likewise not deletable. This keeps captured results from ever being destroyed.
 
 ### Business Value
 
@@ -39,11 +40,13 @@ has locked must not be deletable at all.
   be present before dependent configuration proceeds. (STORY-001-004 adds
   **discipline** to the create step as a required field.)
 - Open one of several competitions and work against its data in isolation.
-- Delete a competition, with explicit confirmation, unless it is locked.
+- Delete a competition, with explicit confirmation, **only while it is still in
+  Setup** (proceedings not yet started); blocked once Running/Suspended/Locked.
 
 ### Scope Out
 
-- Lock/unlock — Contest Director authority (respected, not implemented here).
+- Lock — Contest Director authority (respected here, implemented in
+  STORY-001-026); Locked is a terminal state, so there is no unlock.
 - Template seeding (STORY-001-006) and all further configuration
   (STORY-001-004 onward).
 - Suspend/resume across days (STORY-001-013).
@@ -76,17 +79,21 @@ there changes "Hamilton Winter F3K".
 **When** the Organiser deletes it and confirms the irreversible action
 **Then** the competition and its data are removed.
 
-#### AC5: Deleting a competition with captured scores needs explicit confirmation
-**Given** an unlocked competition in which scores have been captured
-**When** the Organiser requests deletion
-**Then** the system warns that deletion destroys results and proceeds only on
-an explicit confirmation naming that consequence.
+#### AC5: A competition past setup cannot be deleted
+**Given** a competition whose proceedings have started (Running or Suspended) —
+so scores may have been captured
+**When** the Organiser attempts to delete it
+**Then** the system prevents the deletion and tells the Organiser that a
+competition that has started can no longer be deleted; ending it happens via
+Lock / no-contest ([2.3](../docs/requirements/high-level-requirements.md#area-2--competition-lifecycle)),
+not deletion. Deletion is legal only while the competition is still in **Setup**
+([state machine](../docs/requirements/high-level-requirements.md#competition-lifecycle-state-machine)).
 
 #### AC6: A locked competition cannot be deleted
 **Given** a competition the Contest Director has locked
 **When** the Organiser attempts to delete it
 **Then** the system prevents the deletion and tells the Organiser the
-competition is locked.
+competition is locked (a terminal state).
 
 ### INVEST Check
 

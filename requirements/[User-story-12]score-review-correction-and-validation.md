@@ -49,7 +49,7 @@ capture and from the Contest Director's penalty rulings.
 ### Scope Out
 
 - Live capture and the Scorer's on-device correction window (device scope).
-- Penalty imposition (Contest Director, Area 5.9); lock itself (Area 2.2).
+- Penalty imposition (Contest Director, Area 5.9); lock itself (Area 2.3).
 - Bulk manual entry / paper-fallback reconciliation (Area 5.8, separate
   operator function).
 

@@ -226,7 +226,7 @@ be conflated with *pilot cannot fly*.
   two captures (e.g. base-side manual entry after a paper fallback, plus a
   late-syncing device), the event log (D4) records **both**, the conflict
   surfaces as an **anomaly in the CD validation pass**
-  ([2.2](high-level-requirements.md#area-2--competition-lifecycle)), and a
+  ([2.3](high-level-requirements.md#area-2--competition-lifecycle)), and a
   human picks. No timestamp-based last-writer-wins.
 - **A re-flight result is not a conflict:** a re-flight gives the pilot a
   **second working-time result for the same round**

@@ -22,7 +22,7 @@ results on their own devices, and sync between devices) remains a
 | User | Software role | Interaction | Primary areas |
 |---|---|---|---|
 | Organiser | Administrator / setup | Direct, hands-on | 1, 2.1, 2.3, 3, 4.1, 4.2, 4.4, 5.3, 5.4, 5.6, 7 |
-| Contest Director | Officiating authority | Direct, decisions | 2.2, 3 (mid-contest changes), 4.3, 5.3, 5.5, 5.7, 5.9, 6.5, 7 |
+| Contest Director | Officiating authority | Direct, decisions | 2.2, 2.3, 3 (mid-contest changes), 4.3, 5.3, 5.5, 5.7, 5.9, 6.5, 7 |
 | Scorer | Per-competitor field recorder | Direct, device-based, one per pilot | 5.0, 5.1, 5.2, 5.7 *(reads 6 on device)* |
 | Announcer / Timekeeper | Field-aid operator | Direct, on-field | 6 |
 | Pilot / Competitor | Subject & results consumer | Indirect | 3.4, 5, 7 |
@@ -63,7 +63,7 @@ it is *run* belong to the Contest Director.
 |---|---|
 | Maintain reusable master data (pilots, landing tables, templates) | [1](high-level-requirements.md#area-1--master-data-management) |
 | Create, open and delete competitions | [2.1](high-level-requirements.md#area-2--competition-lifecycle) |
-| Suspend the competition at end of day and resume it the next day, state intact | [2.3](high-level-requirements.md#area-2--competition-lifecycle) |
+| Suspend the competition at end of day and resume it the next day, state intact | [2.4](high-level-requirements.md#area-2--competition-lifecycle) |
 | Configure a competition — identity, discipline, entry options, roster, draw/scoring/task rules | [3](high-level-requirements.md#area-3--competition-setup--configuration) |
 | Specify, generate and adjust the draw | [4.1](high-level-requirements.md#area-4--draw--rounds-generation), [4.2](high-level-requirements.md#area-4--draw--rounds-generation), [4.4](high-level-requirements.md#area-4--draw--rounds-generation) |
 | Administer scores — corrections, cross-round review, group moves/re-flights, outlier/missing validation | [5.3](high-level-requirements.md#area-5--scoring), [5.4](high-level-requirements.md#area-5--scoring), [5.6](high-level-requirements.md#area-5--scoring) |
@@ -91,6 +91,7 @@ result. Highest privilege; often the same person as the Organiser in practice.
 |---|---|
 | Authorise mid-contest configuration changes — stated recompute consequences, next-round-onward by default, explicit opt-in to recompute flown rounds | [3](high-level-requirements.md#area-3--competition-setup--configuration) |
 | Validate the draw's fairness and accept or re-draw | [4.3](high-level-requirements.md#area-4--draw--rounds-generation) |
+| Officially start proceedings once setup is complete (roster complete, draw accepted) — transitions the competition from setup to running | [2.2](high-level-requirements.md#area-2--competition-lifecycle) |
 | Impose penalties for infringements | [5.9](high-level-requirements.md#area-5--scoring) |
 | Approve re-flights and group changes | [5.3](high-level-requirements.md#area-5--scoring) |
 | Move a pilot from one group to another for pilot readiness (does **not** change the draw) | [5.3](high-level-requirements.md#area-5--scoring) |
@@ -98,7 +99,7 @@ result. Highest privilege; often the same person as the Organiser in practice.
 | Retire and reinstate pilots | [5.5](high-level-requirements.md#area-5--scoring) |
 | Exercise run-control authority over a running group — pause/resume preparation, fast-forward or add preparation time, release the prep confirmation gate (**pilot unconfirmed** → no-score; **device offline** → no no-score, reconciles on sync), and abort/restart a group | [6.5](high-level-requirements.md#area-6--display-timer--audio-field-aids), [5.7](high-level-requirements.md#area-5--scoring) |
 | Override a blocked round advance ("advance anyway", explicit and attributed) — outstanding missing scores become flagged anomalies for the validation pass; unresolved no-scores convert to zeros; an unflown re-flight entitlement lapses | [6.4](high-level-requirements.md#area-6--display-timer--audio-field-aids), [5.7](high-level-requirements.md#area-5--scoring) |
-| Lock the competition against further changes | [2.2](high-level-requirements.md#area-2--competition-lifecycle) |
+| Lock the competition against further changes | [2.3](high-level-requirements.md#area-2--competition-lifecycle) |
 | Publish official results | [7](high-level-requirements.md#area-7--reports) |
 
 ### 3. Scorer

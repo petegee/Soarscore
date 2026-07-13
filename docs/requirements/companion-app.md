@@ -151,7 +151,7 @@ with the CD's authority and name-pick identity (§1).
   after any failure reverts the field to pen and paper (D3), and the
   mechanism for the CD's end-of-contest corrections.
 - The **CD validation pass that gates Lock**
-  ([2.2](high-level-requirements.md#area-2--competition-lifecycle)): review
+  ([2.3](high-level-requirements.md#area-2--competition-lifecycle)): review
   flagged anomalies (including derived overflies, [D9](decisions.md#d9--per-flight-timestamps-on-the-base-clock),
   and unreconcilable timestamps), enter missing scores, override
   known-incorrect ones, then lock — including the minimum-rounds /
