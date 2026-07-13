@@ -17,7 +17,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions): Prom
   const response = await fetch(path, {
     method: options.method ?? "GET",
     headers: {
-      "Content-Type": "application/json",
+      ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
       "X-Actor-Name": options.actorName,
       "X-Client-Id": options.clientId,
     },

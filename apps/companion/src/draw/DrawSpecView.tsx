@@ -13,17 +13,19 @@ import { getDraw, saveDrawSpec } from "./api.js";
 
 type FieldErrors = Record<string, string[]>;
 
-// Transient, string-backed input mirror of the eight SaveDrawSpecRequest
-// fields (numeric inputs held as strings, coerced only at submit). Never
-// persisted and never the source of truth — the base is (D8/AC6). drawMode is
-// a single-value union, so it is a submitted constant, not form state.
-interface SpecFormState {
+// Transient, string-backed input mirror of the SaveDrawSpecRequest fields
+// the form actually presents (numeric inputs held as strings, coerced only
+// at submit). Never persisted and never the source of truth — the base is
+// (D8/AC6). drawMode is a single-value union, so it is a submitted constant,
+// not form state. minGroupSizeOverride has no slot here (STORY-001-023) —
+// STORY-001-022 superseded it and it now has zero effect on generation;
+// buildRequestBody submits it as a hardcoded null instead.
+export interface SpecFormState {
   roundCount: string;
   groupsPerRound: string;
   fairnessMetric: FairnessMetric;
   avoidConsecutiveFlights: boolean;
   lanePolicy: LaneAllocationPolicy;
-  minGroupSizeOverride: string;
   allowSingleGroup: boolean;
 }
 
@@ -34,11 +36,10 @@ const defaultForm: SpecFormState = {
   fairnessMetric: "min-max-then-excess",
   avoidConsecutiveFlights: false,
   lanePolicy: "rotate",
-  minGroupSizeOverride: "",
   allowSingleGroup: false,
 };
 
-function seedForm(spec: DrawSpecification | null): SpecFormState {
+export function seedForm(spec: DrawSpecification | null): SpecFormState {
   if (!spec) return defaultForm;
   return {
     roundCount: String(spec.roundCount),
@@ -46,8 +47,32 @@ function seedForm(spec: DrawSpecification | null): SpecFormState {
     fairnessMetric: spec.fairnessMetric,
     avoidConsecutiveFlights: spec.avoidConsecutiveFlights,
     lanePolicy: spec.lanePolicy,
-    minGroupSizeOverride: spec.minGroupSizeOverride?.toString() ?? "",
     allowSingleGroup: spec.allowSingleGroup,
+  };
+}
+
+// STORY-001-023 AC5: hoisted to module scope (no closure over component
+// state — it only ever reads its `values` argument) so it can be unit
+// tested directly, proving a save always submits minGroupSizeOverride: null
+// regardless of the loaded spec's prior value, without needing a full
+// interactive render of the form.
+export function buildRequestBody(values: SpecFormState): SaveDrawSpecRequest {
+  return {
+    // Single legal value in MVP (progressive modes are a Future Enhancement).
+    drawMode: "random-anti-repeat",
+    roundCount: Number(values.roundCount),
+    groupsPerRound: Number(values.groupsPerRound),
+    fairnessMetric: values.fairnessMetric,
+    avoidConsecutiveFlights: values.avoidConsecutiveFlights,
+    lanePolicy: values.lanePolicy,
+    // STORY-001-023: the form no longer presents this field —
+    // STORY-001-022 superseded it as the mechanism for getting past a
+    // rule-fixed group-size minimum, and it now has zero effect on
+    // generation. The shared SaveDrawSpecRequest schema still requires the
+    // key, so it is submitted as a hardcoded null, never read from form
+    // state.
+    minGroupSizeOverride: null,
+    allowSingleGroup: values.allowSingleGroup,
   };
 }
 
@@ -108,21 +133,6 @@ export function DrawSpecView({
   useEffect(() => {
     refresh();
   }, [refresh]);
-
-  function buildRequestBody(values: SpecFormState): SaveDrawSpecRequest {
-    return {
-      // Single legal value in MVP (progressive modes are a Future Enhancement).
-      drawMode: "random-anti-repeat",
-      roundCount: Number(values.roundCount),
-      groupsPerRound: Number(values.groupsPerRound),
-      fairnessMetric: values.fairnessMetric,
-      avoidConsecutiveFlights: values.avoidConsecutiveFlights,
-      lanePolicy: values.lanePolicy,
-      minGroupSizeOverride:
-        values.minGroupSizeOverride === "" ? null : Number(values.minGroupSizeOverride),
-      allowSingleGroup: values.allowSingleGroup,
-    };
-  }
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
@@ -278,28 +288,6 @@ export function DrawSpecView({
           />
           Avoid consecutive flights (last group of a round → first of the next)
         </label>
-
-        <label htmlFor="spec-min-group-size">
-          Minimum group size override (blank = class default)
-        </label>
-        <input
-          id="spec-min-group-size"
-          type="number"
-          min={1}
-          value={form.minGroupSizeOverride}
-          onChange={(event) => setForm({ ...form, minGroupSizeOverride: event.target.value })}
-        />
-        {/* Honest helper copy: this relaxes the per-group minimum SIZE
-            (allowing more, smaller groups) — it is NOT the two-group-minimum
-            bypass; that is the spare-scorer checkbox above. */}
-        <p className="hint">
-          Relaxes the per-group minimum size, allowing more, smaller groups.
-        </p>
-        {fieldErrors?.minGroupSizeOverride && (
-          <p role="alert" className="field-error">
-            {fieldErrors.minGroupSizeOverride.join(", ")}
-          </p>
-        )}
 
         <div className="form-actions">
           <button type="submit" className="btn btn-primary" disabled={saving}>

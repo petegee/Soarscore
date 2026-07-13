@@ -35,13 +35,20 @@ export function generateDraw(request: DrawRequest, competitionId: string): Promi
 // the client never sends an authority. A stale drawId 409s with
 // DRAW_CANDIDATE_NOT_FOUND / DRAW_CANDIDATE_SUPERSEDED for the caller to
 // reconcile by re-fetching (last-action-wins, companion-app §2).
+// STORY-001-023: the CD's per-warning acknowledgement rides the same accept
+// call as `acknowledgedWarningIds` — the base re-validates independently and
+// 409s DrawGroupSizeWarningUnacknowledgedError if any gating warning's id is
+// missing (drawDecisionRequestSchema already defaults this to [] server-side,
+// so the extra key is purely additive on the wire).
 export function acceptDraw(
   request: DrawRequest,
   competitionId: string,
   drawId: string,
+  acknowledgedWarningIds: string[],
 ): Promise<DrawEvidenceView> {
   return request<DrawEvidenceView>(`/api/competitions/${competitionId}/draw/accept`, "POST", {
     drawId,
+    acknowledgedWarningIds,
   });
 }
 

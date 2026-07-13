@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
+  ConstraintWarning,
   FlightGroup,
   GeneratedDraw,
   RosterEntryView,
@@ -10,8 +11,10 @@ import type {
 import {
   DrawRounds,
   FairnessEvidence,
+  GroupSizeWarnings,
   TaskDrawSections,
   TaskFairnessRow,
+  allGroupSizeWarningsAcknowledged,
   isMultiTask,
 } from "./DrawView.js";
 
@@ -202,5 +205,76 @@ describe("multi-task path (AC1/AC2)", () => {
       <TaskDrawSections draw={draw} rosterMap={rosterMap} />,
     );
     expect(acceptedSections).toBe(candidateSections);
+  });
+});
+
+// STORY-001-023: group-size-warning acknowledgement. DrawView's own
+// fetch/decision orchestration (handleDecision, refresh, the candidate-id-
+// keyed acknowledgement reset) is stateful and effect-driven and, like the
+// rest of this file's coverage, is intentionally not exercised here — this
+// repo has no jsdom/React Testing Library harness to drive real onChange/
+// onClick events, only react-dom/server static markup. What is exercised
+// directly, matching this file's existing convention of extracting pure
+// logic and presentational pieces out of DrawView for testability:
+//  - allGroupSizeWarningsAcknowledged: the exact gating derivation used for
+//    the Accept button's disabled condition (AC1, AC2).
+//  - GroupSizeWarnings: the exact presentational block DrawView renders,
+//    including the checked state a real acknowledgedIds set would produce.
+function groupSizeWarning(id: string, message: string): ConstraintWarning {
+  return { constraint: "group-size-minimum", message, id };
+}
+
+describe("allGroupSizeWarningsAcknowledged (AC1/AC2 gating derivation)", () => {
+  it("is true (vacuously) for zero warnings — AC1's zero-friction path", () => {
+    expect(allGroupSizeWarningsAcknowledged([], new Set())).toBe(true);
+  });
+
+  it("is false until every warning's id is in the acknowledged set", () => {
+    const warnings = [groupSizeWarning("w1", "Round 3 needs at least 2 groups")];
+    expect(allGroupSizeWarningsAcknowledged(warnings, new Set())).toBe(false);
+    expect(allGroupSizeWarningsAcknowledged(warnings, new Set(["w1"]))).toBe(true);
+  });
+
+  it("requires every id individually — no shortcut for multiple warnings", () => {
+    const warnings = [
+      groupSizeWarning("w1", "Task Duration needs at least 2 groups"),
+      groupSizeWarning("w2", "Task Distance needs at least 2 groups"),
+    ];
+    expect(allGroupSizeWarningsAcknowledged(warnings, new Set(["w1"]))).toBe(false);
+    expect(allGroupSizeWarningsAcknowledged(warnings, new Set(["w1", "w2"]))).toBe(true);
+  });
+});
+
+describe("GroupSizeWarnings (AC1/AC2 rendering)", () => {
+  it("renders nothing for an empty warnings array (AC1)", () => {
+    const html = renderToStaticMarkup(
+      <GroupSizeWarnings warnings={[]} acknowledgedIds={new Set()} onToggle={() => {}} />,
+    );
+    expect(html).toBe("");
+  });
+
+  it("renders the message verbatim with a distinguishing badge, unchecked until acknowledged (AC2)", () => {
+    const warnings = [groupSizeWarning("w1", "Round 2 falls below the rule-fixed minimum group size")];
+    const html = renderToStaticMarkup(
+      <GroupSizeWarnings warnings={warnings} acknowledgedIds={new Set()} onToggle={() => {}} />,
+    );
+    expect(html).toContain("Round 2 falls below the rule-fixed minimum group size");
+    expect(html).toContain("badge-warning");
+    expect(html).toContain("acknowledgement required");
+    // Distinct from the pre-existing non-gating advisory badge.
+    expect(html).not.toContain("advisory");
+    expect(html).not.toContain("checked=");
+  });
+
+  it("reflects a ticked acknowledgement via the checked attribute, keyed on the warning's own id", () => {
+    const warnings = [groupSizeWarning("w1", "message one"), groupSizeWarning("w2", "message two")];
+    const html = renderToStaticMarkup(
+      <GroupSizeWarnings warnings={warnings} acknowledgedIds={new Set(["w1"])} onToggle={() => {}} />,
+    );
+    // w1's checkbox is checked, w2's is not — order-independent id matching.
+    const w1Input = html.match(/<input[^>]*id="w1"[^>]*>/)?.[0] ?? "";
+    const w2Input = html.match(/<input[^>]*id="w2"[^>]*>/)?.[0] ?? "";
+    expect(w1Input).toContain("checked=");
+    expect(w2Input).not.toContain("checked=");
   });
 });

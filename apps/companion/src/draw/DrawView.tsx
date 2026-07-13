@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   Competition,
+  ConstraintWarning,
   DrawEvidenceView,
   FairnessMetric,
   FlightGroup,
@@ -251,6 +252,59 @@ export function isMultiTask(draw: GeneratedDraw): boolean {
   return (draw.rounds[0]?.taskGroups.length ?? 1) > 1;
 }
 
+// STORY-001-023 AC1/AC2: whether every gating warning has been individually
+// ticked — vacuously true for an empty array, which is what makes AC1's
+// zero-friction path fall out of the derivation with no separate branch.
+// Extracted (rather than inlined only in DrawView's render) so it — and the
+// per-warning acknowledgement key it relies on — can be unit tested directly.
+export function allGroupSizeWarningsAcknowledged(
+  warnings: ConstraintWarning[],
+  acknowledgedIds: Set<string>,
+): boolean {
+  return warnings.every((w) => acknowledgedIds.has(w.id as string));
+}
+
+// STORY-001-023 AC1/AC2: the rule-fixed group-size-minimum warnings a
+// specific candidate carries. Distinct from the pre-existing, non-gating
+// `evidence.warnings` advisory block both in data source
+// (GeneratedDraw.groupSizeWarnings) and visual treatment (badge-warning vs.
+// badge) — every entry here always carries an `id` (the type comment on
+// ConstraintWarning guarantees it for this array specifically), which is the
+// acknowledgement key (Safeguard 8 — never `constraint`, not guaranteed
+// unique across a future multi-warning draw).
+export function GroupSizeWarnings({
+  warnings,
+  acknowledgedIds,
+  onToggle,
+}: {
+  warnings: ConstraintWarning[];
+  acknowledgedIds: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  if (warnings.length === 0) return null;
+  return (
+    <>
+      {warnings.map((warning) => {
+        const id = warning.id as string;
+        return (
+          <p key={id} role="alert" className="status-text">
+            <span className="badge badge-warning">acknowledgement required</span> {warning.message}
+            <label className="checkbox-label" htmlFor={id}>
+              <input
+                type="checkbox"
+                id={id}
+                checked={acknowledgedIds.has(id)}
+                onChange={() => onToggle(id)}
+              />
+              Acknowledge
+            </label>
+          </p>
+        );
+      })}
+    </>
+  );
+}
+
 export function DrawView({
   competitionId,
   actor,
@@ -271,6 +325,14 @@ export function DrawView({
   const [alert, setAlert] = useState<string | null>(null);
   // Drives the role="dialog" cancel confirmation.
   const [cancelPending, setCancelPending] = useState(false);
+  // STORY-001-023: the CD's per-warning acknowledgement of the displayed
+  // candidate's groupSizeWarnings — local, transient UI state only (D8), never
+  // sent anywhere until the Accept call. ackForCandidateId tracks which
+  // candidate the set was built for; reset to empty whenever the candidate's
+  // own id changes (including candidate -> null, e.g. after cancel) so a
+  // stale acknowledgement can never attach to a different candidate (AC4).
+  const [acknowledgedIds, setAcknowledgedIds] = useState<Set<string>>(new Set());
+  const [ackForCandidateId, setAckForCandidateId] = useState<string | null>(null);
 
   const actorName = actor.actorName ?? "unknown";
   const request = useCallback(
@@ -300,6 +362,31 @@ export function DrawView({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Adjust-state-during-render (React's documented alternative to a
+  // useEffect for "reset when an id changes"): compared every render against
+  // the last-seen candidate id, so a regenerate or a refresh-driven
+  // reconciliation (AC4, the STORY-001-023 stale-candidate edge case) clears
+  // any ticked acknowledgement the instant the candidate identity changes —
+  // silently, no dialog, before an accept call could ever reach the base
+  // with a mismatched selection.
+  const candidateId = evidence?.candidate?.id ?? null;
+  if (ackForCandidateId !== candidateId) {
+    setAckForCandidateId(candidateId);
+    setAcknowledgedIds(new Set());
+  }
+
+  function toggleAcknowledged(id: string) {
+    setAcknowledgedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   // Generate and regenerate are the same call (AC5): the projection keeps a
   // single candidate, so generating again supersedes the displayed one.
@@ -347,7 +434,7 @@ export function DrawView({
     try {
       const next =
         decide === "accept"
-          ? await acceptDraw(request, competitionId, candidate.id)
+          ? await acceptDraw(request, competitionId, candidate.id, [...acknowledgedIds])
           : await cancelDraw(request, competitionId, candidate.id);
       // Show the returned view transiently, then re-canonicalise from the
       // base — the returned view is never the retained source of truth.
@@ -371,6 +458,11 @@ export function DrawView({
 
   const rosterMap = buildRosterMap(roster);
   const { spec, candidate, accepted, status, warnings } = evidence;
+  // AC1's zero-friction path falls out of `.every` on an empty array being
+  // vacuously true — no separate length === 0 branch needed for the button.
+  const acceptGateSatisfied = candidate
+    ? allGroupSizeWarningsAcknowledged(candidate.groupSizeWarnings, acknowledgedIds)
+    : true;
 
   return (
     <div>
@@ -430,11 +522,21 @@ export function DrawView({
             <span className="badge">candidate</span> Awaiting decision — review the draw and
             fairness evidence, then accept, regenerate, or cancel.
           </p>
+          {/* Rule-fixed group-size-minimum warnings (STORY-001-022/023):
+              structurally and visually distinct from the advisory block
+              above — a separate array (candidate.groupSizeWarnings), a
+              separate badge class, and each entry gates Accept until its own
+              checkbox is ticked (AC2). */}
+          <GroupSizeWarnings
+            warnings={candidate.groupSizeWarnings}
+            acknowledgedIds={acknowledgedIds}
+            onToggle={toggleAcknowledged}
+          />
           <div className="toolbar">
             <button
               className="btn btn-primary"
               onClick={() => handleDecision("accept")}
-              disabled={busy}
+              disabled={busy || !acceptGateSatisfied}
             >
               Accept
             </button>

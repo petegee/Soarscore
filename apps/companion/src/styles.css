@@ -288,6 +288,20 @@ h1 {
   vertical-align: middle;
 }
 
+/* STORY-001-023: gating group-size-minimum warning — reuses .badge's shape
+   but in an attention-grabbing colour, visually distinct from the existing
+   .badge "advisory" (soft, non-blocking) treatment. */
+.badge-warning {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 0.4em;
+  border-radius: 0.25rem;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
 .hint {
   color: var(--color-text-muted);
   font-size: 0.8125rem;
