@@ -223,7 +223,10 @@ supersession edits are tracked as follow-ups, not carried inside this story.
   service, projection, routes and companion UI. D12 **repurposes** this: a table
   becomes an **owned component of a class model**, not an independently selected
   library entry. The `duplicate` verb and deep-copy-on-apply discipline are a
-  direct precedent for cloning.
+  direct precedent for cloning. *(As built: the standalone landing-tables module —
+  service, projection, routes, checker — was removed once tables moved inside the
+  model, commit `4170e60`; `LandingBonusTable` survives only as a type owned per
+  `TaskParameterSet`.)*
 - **Competition** (`apps/base/src/competitions/*`): the aggregate that will hold
   the model reference. Its existing **discipline-change guard** (blocks a change
   once the competition is locked or has captured scores) is the behavioural
@@ -247,26 +250,45 @@ supersession edits are tracked as follow-ups, not carried inside this story.
 
 ### New Concepts Required
 
-- **ContestClassModel** (new aggregate): the first-class definition holding
-  identity (display name, source-class metadata), the group-score basis
-  (`best-raw=1000` scaling; an **inverted** marker for speed; a
-  **separate-per-task** marker for F3B), the drop-worst rule (threshold **+ unit**:
-  round vs task), points-per-second, and an **owned** landing table. Two
-  kinds: **stock** (seeded, read-only, one per class) and **custom** (cloned,
-  editable, named). Relates to `Competition` as its referenced class definition;
-  **contains** a `LandingBonusTable` rather than pointing at a library one.
-- **Stock-model catalogue / seed** (new mechanism): the derived encoding of the
-  six classes from the rule docs, materialised once into the event log so that
-  projections rebuild deterministically. There is **no existing "seed initial
-  data on init"** mechanism in the codebase (the `contestTemplate.seeded` event
-  is audit-only provenance, not a data seed) — this must be introduced.
-- **Model provenance / deviation record** (new): a custom model records the
-  **stock model it was cloned from** and, per changed rule-fixed field, the
-  **stock value alongside the chosen value** (AC6). This is state a downstream
-  report renders; this story records it.
-- **Competition→model reference** (new field on the `Competition` /
-  `ContestTemplate` aggregates and their event payloads): the id linkage that
-  replaces the embedded `discipline` value (AC8).
+- **ContestClassModel** (`packages/shared/src/class-model.ts`, new aggregate):
+  the first-class definition. **As built the model shape grew past this story's
+  original flat "points-per-second + one owned landing table"**: those two
+  fields were **folded into a `tasks: TaskParameterSet[]` list** (one task for the
+  man-on-man classes, three for F3B, five for F5K) so per-task detail from
+  STORY-001-008 could ride the same aggregate rather than being deferred out of
+  it. Each `TaskParameterSet` owns its own `pointsPerSecond` (**nullable** — null
+  where the task fixes no single rate), `landingScored` + `landingTable`
+  (**nullable, owned outright**, D12), `timingPrecision`, `penaltyTypes`, NLH
+  `nlhCoefficients` (F5K), and `minGroupSize`. Model-level it carries: identity
+  (display `name`, `sourceClass` metadata, `origin`), the group-score `basis`
+  (`single-group` vs `separate-per-task` for F3B), a model-level `speedInverted`
+  marker, the `dropWorst` rule (`{ threshold, unit }`, unit `round` vs `task`),
+  `lonePilotBehaviour` (`dummy`/`annul`, STORY-001-011), `minimumForValidContest`
+  (STORY-001-026), and `groupSizeMinimumClause`. Two kinds: **stock** (`origin:
+  "stock"`, seeded, read-only, one per class) and **custom** (`origin: "custom"`,
+  cloned, editable, named). Relates to `Competition` as its referenced class
+  definition; each task **contains** its `LandingBonusTable` rather than pointing
+  at a library one.
+- **Stock-model catalogue / seed** (`STOCK_CLASS_MODELS` + `seedStockModels`):
+  the derived encoding of the six classes from the rule docs, materialised into
+  the event log via a **`classModel.seeded` event** so projections rebuild
+  deterministically. The seed is **idempotent — upsert-by-id keyed on the
+  deterministic `stock-<discipline>` id** (`stockModelIdFor`): a stock model
+  already present is skipped, so a restart never duplicates or orphans a
+  referencing competition. Runs on the single synchronous SQLite writer in
+  `buildApp`.
+- **Model provenance / deviation record** (`deriveDeviations`): a custom model
+  records the **stock model it was cloned from** (`sourceModelId`), and the
+  deviation set is **derived on read by diffing** the custom model against its
+  source (never persisted stale, D4) — a structured `{ field, stockValue,
+  chosenValue }` per differing **rule-fixed** field (AC6). Identity fields (id,
+  name, origin, sourceModelId, sourceClass) are excluded; tasks are diffed
+  positionally by task id with dotted field names.
+- **Competition→model reference** (`classModelId`): now a **required field**
+  (`z.string().min(1)`) on the `Competition`, `ContestTemplate` and task-config
+  aggregates and their event payloads — the id linkage that **replaces** the
+  embedded `discipline` value (AC8). The bare `discipline` enum survives only as
+  the model's `sourceClass` metadata, not as a Competition field.
 
 ### Key Business Rules
 
@@ -340,42 +362,45 @@ tracked follow-up, surfaced under Risks per house rule 2.
 ### Key Design Decisions
 
 - **Stable, deterministic stock-model ids** (e.g. a fixed id per class) vs random
-  UUIDs → trade-off: random UUIDs (the repo default for created aggregates) make
-  re-seed and "regenerate when rule docs change" ambiguous and risk duplicate
-  stock rows on restart. **Recommend deterministic stock ids** so the seed is
-  idempotent (upsert-by-id), competitions reference a stable target, and
-  re-generation updates the same row. Custom models keep random UUIDs.
+  UUIDs → **Adopted: deterministic stock ids** via `stockModelIdFor` (`F5L →
+  "stock-f5l"`), so the seed is idempotent (upsert-by-id), competitions reference
+  a stable target, and re-generation updates the same row. Custom models keep
+  random UUIDs (`crypto.randomUUID()` on clone). Owned landing-table and task ids
+  derive deterministically from the stock id too (`stock-f5l-landing`,
+  `stock-f5l-task`).
 - **Seed materialised into the event log vs computed in-memory at boot** →
-  trade-off: pure in-memory stock (never appended) keeps the log clean but breaks
-  the "current state derivable from the log" invariant (D4) and complicates
-  referential integrity and audit. **Recommend appending a `classModel.seeded`
-  (or `classModel.created` with a stock marker) event once, idempotently**, so
-  stock models are first-class log citizens like everything else.
+  **Adopted: a dedicated `classModel.seeded` event appended once, idempotently**
+  by `seedStockModels` (skips any stock id already projected), so stock models are
+  first-class log citizens like everything else and state stays derivable from the
+  log (D4). The projection treats `classModel.seeded` / `.created` / `.updated`
+  identically (full model payload), with `.deleted` as a tombstone.
 - **Model shape must accommodate the F3B outlier without a code branch** →
-  trade-off: a flat "points-per-second + one landing table" record fits the five
-  man-on-man classes but not F3B (per-task normalisation, per-task discard, and
-  tasks that have no single points-per-second or landing table). **Recommend a
-  shape with an explicit `normalisation`/basis marker (single-group vs
-  separate-per-task) and a drop-worst `unit` (round vs task)** — the markers the
-  story's Scope In already names — carrying the F3B specifics as markers now and
-  deferring full per-task detail to 008 (additive slots). This keeps NFR-1's
-  "no switching on discipline" honest.
+  **Adopted the basis + drop-worst-unit markers — and went further than the
+  original defer-to-008 plan**: rather than carrying F3B markers alone and
+  deferring per-task detail, the aggregate now holds the **full
+  `TaskParameterSet[]`** (008's slots folded in). F3B is expressed purely as data
+  — `basis: "separate-per-task"`, `dropWorst.unit: "task"`, three tasks with
+  their own precision/rate/penalties and `minGroupSizeAllCompetitorsFallback` —
+  with no `switch (discipline)` anywhere. Nullable per-task `pointsPerSecond` /
+  `landingTable` absorb the F3K/F5K/F3B-Distance-Speed outliers that have no single
+  rate or table.
 - **Deviation recorded as structured stock-vs-chosen per field vs a free-text
-  note** → **recommend structured** (field → {stockValue, chosenValue}) so AC6
-  and future report rendering are data-driven, matching the codebase's
-  denormalise-for-audit habit (`contestTemplate.seeded.templateName`).
+  note** → **Adopted structured** (`ModelFieldDeviation { field, stockValue,
+  chosenValue }`), derived on read by `deriveDeviations` diffing custom-vs-source
+  (never persisted), so AC6 and future report rendering are data-driven.
 - **Pivot `Competition.discipline` → `classModelId` as a replacement vs an
-  additive parallel field** → trade-off: a hard replacement is cleanest for NFR-1
-  but forces migration of existing competitions and every payload/consumer at
-  once; a parallel field defers the cleanup but violates "no bare discipline
-  stands alone" (AC8). **Recommend the reference field is authoritative and the
-  bare enum is removed from the write path**, with existing competitions
-  back-filled by mapping their `discipline` to the matching stock model (see
-  Risks). The scale (D7: ≤ handful of competitions) makes migration trivial.
+  additive parallel field** → **Adopted the hard replacement**: `classModelId` is
+  a **required** field (`z.string().min(1, "A contest class is required")`) on
+  `Competition`, `ContestTemplate` and task-config, and the bare `discipline`
+  field is gone from the Competition write path (it survives only as the model's
+  `sourceClass` metadata). Green-field status (no real data, per CLAUDE.md) made
+  the "back-fill existing competitions" concern moot — no reconciliation event was
+  needed.
 - **Reference-checker direction inverts** (was: task-config → landing table;
-  now: competition → model) → **recommend a `ClassModelReferenceChecker` backed
-  by the competition projection**, mirroring `ProjectionRosterReferenceChecker`,
-  replacing the `NoTaskConfigYetChecker` role for tables.
+  now: competition → model) → **Adopted `ProjectionClassModelReferenceChecker`**
+  backed by the competition projection (filters `competition.classModelId ===
+  modelId`), mirroring `ProjectionRosterReferenceChecker`, with no force/override
+  path (AC9).
 
 ### Alternatives Considered
 
@@ -404,39 +429,53 @@ tracked follow-up, surfaced under Risks per house rule 2.
   **already recorded** in `docs/requirements/decisions.md` (dated 2026-07-10).
   The story text is stale on this point — no action needed beyond noting the
   prerequisite is satisfied.
-- **"Points-per-second" and "an owned landing table" as universal fields**: the
-  Scope In lists these as if every class has exactly one of each, but F3B's
-  Distance and Speed tasks have no landing table and no single points-per-second
-  rate, and F3K/all-up scoring differs again. Ambiguous whether these are
-  nullable/per-task for the outliers or simply absent. Needs clarification of
-  the model shape's optionality for non-duration tasks.
-- **"Regenerated when those docs change"**: the mechanism and trigger for
-  re-deriving stock models when the read-only rule docs change is unspecified —
-  is it a manual re-seed, a checked-in derived artifact, a version bump? Affects
-  the seed's idempotency/upsert design.
-- **Deviation granularity**: AC6 shows one changed field (drop-worst). Whether
-  the deviation record must enumerate *every* differing field, or only
-  rule-fixed ones, and whether the model name itself counts, is not pinned down.
-- **What "rule-fixed values" are editable on a custom clone**: AC5/AC7 imply
-  drop-worst, points-per-second, basis and the landing table are all editable on
-  a custom model, but the story does not enumerate the editable surface. Needs
-  an explicit list (with 008's per-task additions out of scope).
+- **"Points-per-second" and "an owned landing table" as universal fields** →
+  **Resolved: per-task and nullable.** Both moved onto `TaskParameterSet` as
+  `pointsPerSecond: number | null` and `landingTable: LandingBonusTable | null`
+  gated by a `landingScored` boolean. F3B Distance/Speed, F3K tenths, and F5K
+  summed-per-task all carry `null` rates; only landing-scored tasks carry a table
+  (a table on a `landingScored:false` task is dropped at save, not persisted).
+- **"Regenerated when those docs change"** → **Resolved: no update path required
+  (green-field).** `STOCK_CLASS_MODELS` is a checked-in derived artifact
+  transcribed from the rule docs; `seedStockModels` seeds any *missing* stock
+  model by its stable `stock-<discipline>` id. Because there is no live data to
+  preserve (CLAUDE.md), re-deriving an already-seeded model in place is
+  deliberately out of scope — a rule-doc change is applied by editing the artifact
+  and re-initialising a fresh log; no in-place upsert or version bump was needed.
+- **Deviation granularity** → **Resolved: every differing rule-fixed field,
+  identity fields excluded.** `deriveDeviations` emits one entry per changed
+  scoring-shape field (basis, speedInverted, dropWorst.threshold/unit,
+  lonePilotBehaviour, and each task's rule-fixed slots diffed positionally by id);
+  `name` and other identity fields are deliberately not counted as deviations.
+- **What "rule-fixed values" are editable on a custom clone** → **Resolved:
+  enumerated in `updateClassModelRequestSchema`.** Editable surface = `name`,
+  `basis`, `speedInverted`, `dropWorst`, `lonePilotBehaviour`, and the full
+  `tasks[]` shape (name, timing precision, points-per-second, speedInverted,
+  landing table, per-round override, NLH, penalty types, min group size).
+  `origin` / `sourceModelId` / `sourceClass` / `groupSizeMinimumClause` /
+  `minimumForValidContest` are **preserved server-side** as non-editable identity
+  metadata (008's per-task detail was ultimately included, not deferred).
 
 ### Edge Cases
 
-- **Existing competitions with a bare `discipline` and no model reference**: the
-  pivot must back-fill them to the matching stock model, or they violate AC8's
-  "no bare discipline value stands alone". The event-sourced log already contains
-  `competition.created` events carrying `discipline` — a projection-time mapping
-  or a one-off reconciliation event is required.
-- **Existing `ContestTemplate`s** likewise carry `discipline`; seeding a
-  competition from an old template must resolve to a model, not an enum.
-- **Cloning a custom model** (not just a stock one): AC5 clones a stock model;
-  the behaviour of cloning an already-custom model (source-of-record, deviation
-  chaining) is unspecified.
-- **Re-seed after a stock model is referenced/cloned**: an idempotent re-seed
-  must not orphan competitions referencing a stock id, nor silently alter a
-  stock model a competition already ran under (audit/history implication).
+- **Existing competitions with a bare `discipline` and no model reference** →
+  **Resolved: no back-fill needed (green-field).** `Competition.classModelId` is a
+  required field and `discipline` was removed from the Competition write path
+  outright; with no real data to migrate (CLAUDE.md), no reconciliation event was
+  written.
+- **Existing `ContestTemplate`s** → **Resolved the same way**: `ContestTemplate`
+  and task-config both pivoted to a required `classModelId`; a seeded competition
+  inherits a model reference, never a bare enum.
+- **Cloning a custom model** (not just a stock one) → **Resolved: supported.**
+  `clone(sourceId, …)` accepts any source and records it as `sourceModelId`;
+  cloning a custom model points the clone at that custom source (deviations are
+  derived against the immediate source, not chained back to stock).
+- **Re-seed after a stock model is referenced/cloned** → **Resolved: skip-if-
+  present, by design.** `seedStockModels` skips any stock id already present, so a
+  re-seed never duplicates or orphans a referencing competition. Propagating a
+  rule-doc correction into an already-seeded stock model in place is intentionally
+  not supported (green-field — no live data to preserve; re-initialise a fresh log
+  instead).
 - **Name collision between a custom model and a stock model's display name**
   (e.g. naming a clone "F5L"): AC10 covers uniqueness across models — confirm
   stock names participate in the uniqueness set.
@@ -456,19 +495,21 @@ tracked follow-up, surfaced under Risks per house rule 2.
   bare-enum removal as a tracked, mechanical follow-up per the story's own
   "supersession edits are follow-ups" note; keep this story's build to the
   additive reference field + model aggregate where feasible.
-- **F3B / F3K shape pressure on NFR-1** → if the model can't express the
-  outliers as data, a hidden `switch (discipline)` creeps back in downstream,
-  silently breaking NFR-1. Mitigation: bake the basis/normalisation and
-  drop-worst-unit markers into the model now (AC4 already forces the F3B markers),
-  and verify no consumer branches on discipline.
-- **Reference-checker inversion (house rule 2 conflict check)** → 001-008 was
-  scoped to make *task config* reference landing tables via
-  `NoTaskConfigYetChecker`; D12 moves tables inside models, inverting the
-  reference direction. This is a cross-story inconsistency to **flag and
-  reconcile with the user** before landing (do not silently repurpose the seam).
-- **Immutability enforcement is new** → no current aggregate has a read-only
-  sub-kind; the stock/custom distinction must be enforced in the service (edit
-  and delete both), not just the UI, or AC7/AC9 are bypassable via the API.
+- **F3B / F3K shape pressure on NFR-1** → **Addressed.** The outliers are
+  expressed as data — `basis`, `dropWorst.unit`, nullable per-task
+  `pointsPerSecond` / `landingTable`, and F3B's `minGroupSizeAllCompetitorsFallback`
+  — with no `switch (discipline)` in the aggregate. The full `TaskParameterSet[]`
+  gives downstream readers a data-driven surface instead of a discipline branch.
+- **Reference-checker inversion (house rule 2 conflict check)** → **Resolved.**
+  The old `NoTaskConfigYetChecker` / standalone landing-table module was removed
+  (commit `4170e60`, "remove orphaned landing-tables module (016 leftover)");
+  the direction is now competition → model via
+  `ProjectionClassModelReferenceChecker`.
+- **Immutability enforcement is new** → **Addressed in the service.**
+  `update()` and `delete()` both throw `StockModelReadonlyError`
+  (`CLASS_MODEL_STOCK_READONLY`) for `origin: "stock"`, so AC7/AC9 hold at the API,
+  not just the UI. Delete additionally refuses an in-use custom model with
+  `ReferencedClassModelError` naming the referencing competitions.
 - **Landing-table value fidelity** → stock tables are transcribed from rule-doc
   tables (e.g. F5L's 100→0 over 15 m); a transcription error would contravene
   house rule 1. Mitigation: derive directly from the class rule doc tables and
@@ -481,10 +522,10 @@ tracked follow-up, surfaced under Risks per house rule 2.
 | 1 | Six stock models seeded, read-only, each showing basis/drop-worst/pts-per-sec/table | Yes | Needs the new idempotent seed-on-init; verify exactly six and the read-only marker. |
 | 2 | Stock model owns its landing table (F5L 100→0) | Yes | Table embedded in model payload; transcribe F5L rule table incl. boundary rows. |
 | 3 | Class numbers reflect rule (F5L 2pt/beyond5; F5J 1pt/beyond4) | Yes | Straight seed values from rule docs. |
-| 4 | F3B separate-per-task + per-task drop-worst unit | Partial | Requires basis + drop-worst-unit markers in the model shape; full per-task detail is 008. Confirm markers suffice for AC4's "distinct" assertion. |
-| 5 | Clone stock → named custom, stock unchanged, source recorded | Yes | Reuse duplicate/deep-copy precedent; record source id. |
-| 6 | Custom model records deviation (stock value vs chosen) | Yes | Structured per-field deviation record; confirm granularity (all fields vs changed only). |
-| 7 | Stock models read-only; direct edit prevented, directed to clone | Yes | New service-level immutability guard; enforce in API, not just UI. |
-| 8 | Competition references a class model (no bare discipline) | Partial | Reference field addable here; full removal of bare enum + back-fill of existing competitions is the cross-aggregate follow-up. |
-| 9 | In-use model undeletable; stock never deletable | Yes | New competition→model `ClassModelReferenceChecker` (mirror roster checker) + stock guard. |
-| 10 | Clone requires unique, non-blank name | Yes | Reuse template `assertNameAvailable` (trimmed, case-insensitive); confirm stock names are in the set. |
+| 4 | F3B separate-per-task + per-task drop-worst unit | **Done** | `basis: "separate-per-task"` + `dropWorst.unit: "task"` on the F3B stock model, with its three tasks fully present (full 008 per-task detail was folded in, not deferred). |
+| 5 | Clone stock → named custom, stock unchanged, source recorded | **Done** | `clone()` deep-copies every task via `copyTaskParameterSet`, records `sourceModelId`; accepts a custom source too. |
+| 6 | Custom model records deviation (stock value vs chosen) | **Done** | `deriveDeviations` — structured `{field, stockValue, chosenValue}` per changed rule-fixed field, derived on read (D4). |
+| 7 | Stock models read-only; direct edit prevented, directed to clone | **Done** | `update()` throws `StockModelReadonlyError` for stock origin; message directs to clone. |
+| 8 | Competition references a class model (no bare discipline) | **Done** | `classModelId` is a required field on Competition/ContestTemplate/task-config; bare `discipline` removed from the write path (green-field, no back-fill needed). |
+| 9 | In-use model undeletable; stock never deletable | **Done** | `ProjectionClassModelReferenceChecker` + stock guard in `delete()`; no force path. |
+| 10 | Clone requires unique, non-blank name | **Done** | `assertNameAvailable` (trimmed, case-insensitive) across all models incl. stock; blank caught by Zod `modelName`. |

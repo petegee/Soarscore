@@ -17,21 +17,29 @@ seeding a new model rather than changing code (NFR-2).
   club-level rule variation (no silent per-field overrides).
 - **Pivot** the `Competition` and `ContestTemplate` aggregates from an embedded
   `discipline` value to a **`classModelId` reference** (full replacement), so no
-  bare discipline value stands alone anywhere on the write path; back-fill
-  existing log records deterministically.
+  bare discipline value stands alone anywhere on the write path. *(As built: on
+  green-field grounds — no live data to preserve, per CLAUDE.md — `discipline`
+  was **removed outright** from the write path and `classModelId` made a
+  **required** field; the planned legacy-payload back-fill was not needed and
+  not built.)*
 - **Retire** the standalone landing-table library (routes + companion UI): a
   landing table is now **owned inside** a class model, never selected
-  independently. Existing landing-table events remain in the log (D4).
+  independently. *(As built: the whole standalone landing-tables module — service,
+  projection, routes, checker — was removed, commit `4170e60`; the
+  `LandingBonusTable` type survives, now owned per task.)*
 - Enforce **stock immutability** (never editable or deletable) and
   **referential integrity** (a model referenced by a competition cannot be
   deleted) at the service layer, not only the UI.
 
 **Boundary:** this story records the model, the clone/edit deviation, and the
 reference linkage. It does **not** apply the scoring basis/drop-worst/landing
-table during score computation (001-007 / per-discipline), does not build the
-model-**selection UX** or the change-with-captured-scores UX guard (001-004),
-and does not add per-task parameters, metrics or penalties (001-008 — additive
-slots).
+table during score computation (001-007 / per-discipline), and does not build the
+model-**selection UX** or the change-with-captured-scores UX guard (001-004).
+*(As built the model shape grew past this original boundary: the flat
+`pointsPerSecond` + single `landingTable` became a per-task
+`TaskParameterSet[]`, so STORY-001-008's per-task parameters/metrics/penalties,
+STORY-001-011's `lonePilotBehaviour`, and STORY-001-026's `minimumForValidContest`
+now ride this aggregate as additive slots rather than being deferred out of it.)*
 
 ## Entities
 
@@ -47,16 +55,38 @@ class ContestClassModel {
     +string sourceModelId
     +ClassModelBasis basis
     +boolean speedInverted
-    +number pointsPerSecond
     +DropWorstRule dropWorst
-    +LandingBonusTable landingTable
-    +boolean isStock()
+    +string groupSizeMinimumClause
+    +MinimumForValidContest minimumForValidContest
+    +TaskParameterSet[] tasks
+    +LonePilotBehaviour lonePilotBehaviour
     +stockModelIdFor(Discipline) string$
 }
 
 class DropWorstRule {
     +number threshold
     +DropWorstUnit unit
+}
+
+class MinimumForValidContest {
+    +number rounds
+    +number tasks
+}
+
+class TaskParameterSet {
+    +string id
+    +string name
+    +TimingPrecision timingPrecision
+    +number pointsPerSecond
+    +boolean speedInverted
+    +boolean landingScored
+    +LandingBonusTable landingTable
+    +boolean perRoundOverrideAllowed
+    +boolean nlhApplicable
+    +NlhCoefficients nlhCoefficients
+    +PenaltyType[] penaltyTypes
+    +number minGroupSize
+    +boolean minGroupSizeAllCompetitorsFallback
 }
 
 class LandingBonusTable {
@@ -99,9 +129,9 @@ class UpdateClassModelRequest {
     +string name
     +ClassModelBasis basis
     +boolean speedInverted
-    +number pointsPerSecond
     +DropWorstRule dropWorst
-    +LandingBonusTable landingTable
+    +TaskParameterSet[] tasks
+    +LonePilotBehaviour lonePilotBehaviour
 }
 
 class ClassModelResponse {
@@ -111,7 +141,9 @@ class ClassModelResponse {
 }
 
 ContestClassModel "1" *-- "1" DropWorstRule : has
-ContestClassModel "1" *-- "0..1" LandingBonusTable : owns
+ContestClassModel "1" *-- "0..1" MinimumForValidContest : has
+ContestClassModel "1" *-- "1..*" TaskParameterSet : owns
+TaskParameterSet "1" *-- "0..1" LandingBonusTable : owns
 ContestClassModel "0..1 custom" --> "1 stock" ContestClassModel : clonedFrom(sourceModelId)
 Competition "N" --> "1" ContestClassModel : references(classModelId)
 ContestTemplate "N" --> "1" ContestClassModel : references(classModelId)
@@ -126,10 +158,12 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
   entry/table type. The standalone *library* retires; the *type* is repurposed.
 - **Keep `Discipline` / `DISCIPLINES`** — no longer a `Competition` field, but the
   model's `sourceClass` metadata and the seed's iteration set.
-- **Nullable outlier fields:** `pointsPerSecond` and `landingTable` are
-  `null` where the class does not fix a single linear rate / one table (F3B
-  separate-per-task, F3K tenths-timing no-bonus, F5K all-up). `basis` +
-  `dropWorst.unit` carry the structural difference — no `switch (discipline)`.
+- **Nullable outlier fields (per task):** each `TaskParameterSet` carries its own
+  `pointsPerSecond: number | null` and `landingScored` + `landingTable:
+  LandingBonusTable | null`, `null` where that task fixes no single linear rate /
+  no table (F3B Distance/Speed, F3K tenths-timing no-bonus, F5K all-up). `basis` +
+  `dropWorst.unit` carry the model-level structural difference — no
+  `switch (discipline)`.
 - **Derive, don't store, deviations:** `ModelFieldDeviation[]` is computed by
   diffing a custom model against its `sourceModelId` stock model at read time —
   never persisted stale (matches D4's "state derivable from the log").
@@ -156,21 +190,27 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
      (never duplicates, never orphans referencing competitions).
 
 3. **Clone-and-edit as the auditable deviation:**
-   - `clone` deep-copies a source model's rule-fixed values into a new custom
-     model (`origin: "custom"`, `sourceModelId` = source id, random UUID),
-     precedented by `landingTable.duplicate`.
+   - `clone` deep-copies a source model's rule-fixed values (including every
+     `TaskParameterSet` via `copyTaskParameterSet`) into a new custom
+     model (`origin: "custom"`, `sourceModelId` = source id, random UUID);
+     accepts a stock **or** custom source.
    - `update` edits **custom models only**; stock edits are refused with a
-     "clone it first" error. Deviations are derived on read by diffing against
-     the source stock model.
+     "clone it first" error. The editable surface is the full task list plus
+     model-level `basis`/`speedInverted`/`dropWorst`/`lonePilotBehaviour`;
+     identity/rule metadata (`origin`, `sourceModelId`, `sourceClass`,
+     `groupSizeMinimumClause`, `minimumForValidContest`) is preserved
+     server-side. Deviations are derived on read by diffing against the source.
 
 4. **Full competition→model pivot (chosen scope):**
    - Replace `discipline` with `classModelId` on `Competition` and
      `ContestTemplate` — types, Zod fields, event payloads, projections,
      services, routes, companion forms, tests.
-   - **Back-fill without rewriting the log:** projections tolerate legacy
-     payloads — `classModelId = payload.classModelId ?? stockModelIdFor(payload.discipline)` —
-     so old `competition.created` / `contestTemplate.created` events resolve to
-     the matching stock model. New events carry `classModelId` only.
+   - **As built — no back-fill:** on green-field grounds (no live data to
+     preserve, per CLAUDE.md) `discipline` was removed outright and
+     `classModelId` made a **required** field (`z.string().min(1)`). The planned
+     `classModelId = payload.classModelId ?? stockModelIdFor(payload.discipline)`
+     legacy-payload tolerance was **not** implemented — there were no legacy
+     payloads to resolve.
    - The existing discipline-change guard (locked / captured-scores) is
      mechanically re-keyed to `classModelId`; the richer selection UX/guard is
      001-004.
@@ -195,16 +235,18 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
 1. `ClassModelBasis = "single-group" | "separate-per-task"` and
    `DropWorstUnit = "round" | "task"` and `ModelOrigin = "stock" | "custom"`
    are string-literal unions in `packages/shared`.
-2. `ContestClassModel` is a plain interface owning a `DropWorstRule` and an
-   optional `LandingBonusTable` (reused type).
+2. `ContestClassModel` is a plain interface owning a `DropWorstRule`, an optional
+   `MinimumForValidContest`, and a `TaskParameterSet[]` — each task owning an
+   optional `LandingBonusTable` (reused type), `TimingPrecision`,
+   `NlhCoefficients` and `PenaltyType[]`. `LonePilotBehaviour` and
+   `ClassModelBasis`/`DropWorstUnit`/`ModelOrigin` are string-literal unions.
 3. `ClassModelReferenceChecker` is an interface; `ProjectionClassModelReferenceChecker`
    implements it over `CompetitionProjection` (parallel to
    `ProjectionRosterReferenceChecker`).
-4. New errors extend the existing `DomainError` base (as
-   `LandingTableNotFoundError` etc. do): `ClassModelNotFoundError` (→404),
-   `StockModelReadonlyError` (→409), `ReferencedClassModelError` (→409, carries
-   referencing competitions), plus reuse of the shared `ValidationError` (→400)
-   for name/shape violations.
+4. New errors all extend the shared `DomainError` base (`ClassModelNotFoundError`
+   → 404 via a `NOT_FOUND`-classed code, `StockModelReadonlyError` → 409,
+   `ReferencedClassModelError` → 409 carrying referencing competitions), plus
+   reuse of the shared `ValidationError` (→400) for name/shape violations.
 
 ### Dependencies
 1. `ClassModelService` depends on `EventStore`, `ClassModelProjection`, and
@@ -245,35 +287,47 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
 1. **Responsibility:** the single definition of the class-model shape, its Zod
    request schemas, the deterministic stock-id mapping, and the six stock seed
    definitions.
-2. **Types:**
-   - `ClassModelBasis`, `DropWorstUnit`, `ModelOrigin` (string-literal unions).
-   - `DropWorstRule { threshold: number; unit: DropWorstUnit }`.
-   - `ContestClassModel { id, name, sourceClass: Discipline, origin, sourceModelId: string | null, basis, speedInverted, pointsPerSecond: number | null, dropWorst, landingTable: LandingBonusTable | null }`.
+2. **Types** *(as built — the flat `pointsPerSecond`/`landingTable` became a
+   per-task list; 008/011/026 slots folded in):*
+   - `ClassModelBasis`, `DropWorstUnit`, `ModelOrigin`, `LonePilotBehaviour`
+     (string-literal unions).
+   - `DropWorstRule { threshold; unit }`, `MinimumForValidContest { rounds; tasks: number | null }`,
+     `TimingPrecision { stepSeconds; rounding }`, `NlhCoefficients { belowPerMetre; above1to10PerMetre; above11PlusPerMetre }`,
+     `PenaltyType { code; label; defaultDeduction }`.
+   - `TaskParameterSet { id, name, timingPrecision, pointsPerSecond: number | null, speedInverted, landingScored, landingTable: LandingBonusTable | null, perRoundOverrideAllowed, nlhApplicable, nlhCoefficients: NlhCoefficients | null, penaltyTypes, minGroupSize: number | null, minGroupSizeAllCompetitorsFallback }`.
+   - `ContestClassModel { id, name, sourceClass: Discipline, origin, sourceModelId: string | null, basis, speedInverted, dropWorst, groupSizeMinimumClause: string | null, minimumForValidContest: MinimumForValidContest | null, tasks: TaskParameterSet[], lonePilotBehaviour }`.
    - `ModelFieldDeviation { field: string; stockValue: unknown; chosenValue: unknown }`.
 3. **Methods / helpers:**
    - `stockModelIdFor(discipline: Discipline): string` — pure map
-     `F3B→"stock-f3b"`, …, `F5L→"stock-f5l"`. Used by the seed **and** by the
-     legacy back-fill in projections.
-   - `STOCK_CLASS_MODELS: ContestClassModel[]` — the six definitions:
-     - **F3J** `single-group`, `pointsPerSecond 1`, `dropWorst {7,"round"}`, fine 100→0 landing table (≤0.2→100 … over 15→0), `speedInverted false`.
-     - **F5J** `single-group`, `pointsPerSecond 1`, `dropWorst {4,"round"}`, the coarser F5J landing table, `speedInverted false`.
-     - **F5L** `single-group`, `pointsPerSecond 2`, `dropWorst {5,"round"}`, the F5L 100→0 landing table (same shape as F3J), `speedInverted false`.
-     - **F3K** `single-group`, `pointsPerSecond null`, `landingTable null` (no landing bonus), `dropWorst {5,"round"}` (drop from 6th), `speedInverted false`.
-     - **F5K** `single-group`, `pointsPerSecond null`, `landingTable null` (all-up summed), `dropWorst {6,"round"}` (drop from 7th), `speedInverted false`.
-     - **F3B** `separate-per-task`, `pointsPerSecond null`, `landingTable null` (per-task tables deferred to 008), `dropWorst {5,"task"}`, `speedInverted true`.
+     `F3B→"stock-f3b"`, …, `F5L→"stock-f5l"`. Used by the seed (the planned
+     legacy back-fill was dropped — see the pivot below).
+   - `copyTaskParameterSet(task)` — deep-copies a task (precision, coefficients,
+     penalties, owned table) so a clone shares no nested object with its source.
+   - `STOCK_CLASS_MODELS: ContestClassModel[]` — the six definitions, each with a
+     `tasks[]` transcribed from the rule docs (values below verified against the
+     shipped seed):
+     - **F3J** `single-group`, `dropWorst {7,"round"}`, min 4 rounds; one Duration task, 0.1 s timing, 1 pt/s, fine 100→0 landing table, min group 6.
+     - **F5J** `single-group`, `dropWorst {4,"round"}`, min 4 rounds; one Duration task, whole-sec truncated, 1 pt/s, coarser 50→0 table, min group 6.
+     - **F5L** `single-group`, `dropWorst {5,"round"}`, min 4 rounds; one Duration task, whole-sec truncated, 2 pt/s, 100→0 fine table, no per-group min.
+     - **F3K** `single-group`, `dropWorst {5,"round"}` (drop from 6th), min 5 rounds; one Flight-time task, 0.1 s truncated, `pointsPerSecond null`, no landing, `perRoundOverrideAllowed true`, min group 5.
+     - **F5K** `single-group`, `dropWorst {6,"round"}` (drop from 7th), `minimumForValidContest null`, no per-group min; five tasks A–E, whole-sec truncated, `pointsPerSecond null`, `nlhApplicable true` with the F5K NLH slopes.
+     - **F3B** `separate-per-task`, `speedInverted true`, `dropWorst {5,"task"}`, `minimumForValidContest {rounds:1, tasks:1}`, `lonePilotBehaviour "annul"`; three tasks (Duration 1 pt/s min 5; Distance no rate min 3; Speed 1/100 s inverted min 8 with `minGroupSizeAllCompetitorsFallback`).
    - Each stock definition: `id = stockModelIdFor(class)`, `name = class code`,
-     `origin "stock"`, `sourceModelId null`, `sourceClass = the class`.
-   - `deriveDeviations(custom: ContestClassModel, source: ContestClassModel): ModelFieldDeviation[]`
-     — compares `basis`, `speedInverted`, `pointsPerSecond`, `dropWorst.threshold`,
-     `dropWorst.unit`, and landing-table equality; emits one entry per differing
-     rule-fixed field (`field` dotted-path, `stockValue`, `chosenValue`).
+     `origin "stock"`, `sourceModelId null`, `sourceClass = the class`,
+     `lonePilotBehaviour "dummy"` (except F3B `"annul"`).
+   - `deriveDeviations(custom, source): ModelFieldDeviation[]` — compares model
+     fields (`basis`, `speedInverted`, `dropWorst.threshold`/`.unit`,
+     `lonePilotBehaviour`) and diffs `tasks` positionally by task id (each task's
+     precision, rate, landing, NLH, penalties, min-group slots), emitting one
+     entry per differing rule-fixed field (dotted-path `field`, `stockValue`,
+     `chosenValue`); identity fields excluded.
 4. **Zod schemas** (mirror the landing-table/competition field style — trim +
    named messages so `flatten().fieldErrors` names the field):
    - `cloneClassModelRequestSchema` = `{ name }` (trimmed, required, ≤100 chars).
-   - `updateClassModelRequestSchema` = `{ name, basis, speedInverted, pointsPerSecond (number|null, ≥0 when present), dropWorst {threshold: int ≥0, unit}, landingTable (nullable; entries validated by `landingBonusEntrySchema`, ≥1 when present) }`.
-5. **Constraints:** `name` required/trimmed/≤100; `pointsPerSecond` non-negative
-   when present; `dropWorst.threshold` non-negative integer. Export all; add
-   `export * from "./class-model.js"` to `index.ts`.
+   - `updateClassModelRequestSchema` = `{ name, basis, speedInverted, dropWorst {threshold: int ≥0, unit}, tasks: updateTaskSchema[] (≥1), lonePilotBehaviour }`, where `updateTaskSchema` carries the full editable task surface (timingPrecision, pointsPerSecond number|null ≥0, speedInverted, landingScored, nullable landingTable with ≥1 entry, perRoundOverrideAllowed, nlhApplicable, nullable nlhCoefficients, penaltyTypes, minGroupSize int>0|null, minGroupSizeAllCompetitorsFallback).
+5. **Constraints:** `name` required/trimmed/≤100; per-task `pointsPerSecond`
+   non-negative when present; `dropWorst.threshold` non-negative integer; ≥1 task.
+   Export all; add `export * from "./class-model.js"` to `index.ts`.
 
 ### Update Events Module — `packages/shared/src/events.ts`
 1. **Add** `ClassModelEventType = "classModel.seeded" | "classModel.created" | "classModel.updated" | "classModel.deleted"`.
@@ -281,7 +335,8 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
    `ClassModelUpdatedPayload` = the full `ContestClassModel` shape;
    `ClassModelDeletedPayload { modelId: string }`. Add
    `classModelToCreatedPayload(model): ClassModelCreatedPayload` (deep-copies
-   `dropWorst` and `landingTable.entries`).
+   `dropWorst`, `minimumForValidContest`, and each task via `copyTaskParameterSet`)
+   and export `copyTaskParameterSet` for reuse by the service/projection.
 3. **Pivot competition/template payloads (full replacement):**
    - `CompetitionCreatedPayload`: **replace** `discipline: Discipline` with
      `classModelId: string`.
@@ -296,7 +351,8 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
 2. **Attributes:** `private models = new Map<string, ContestClassModel>()`.
 3. **Methods:**
    - `apply(record)`: on `classModel.seeded | classModel.created | classModel.updated`
-     → deep-copy the payload into the map (copy `dropWorst`, `landingTable.entries`);
+     → deep-copy the payload into the map (copy `dropWorst`,
+     `minimumForValidContest`, and each task via `copyTaskParameterSet`);
      on `classModel.deleted` → delete by `modelId`.
    - `rebuild(events)`, `getAll()` (stock-first then name sort, or name sort —
      match the landing-table sort idiom), `getById(id)`,
@@ -304,9 +360,10 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
 4. **Constraints:** derived state only (D4/D7); no aliasing between stored models.
 
 ### Create Errors — `apps/base/src/class-models/errors.ts`
-1. `ClassModelNotFoundError extends NotFoundError` (→404).
-2. `StockModelReadonlyError extends DomainError` (→409) — message directs the
-   Organiser to clone the model.
+1. `ClassModelNotFoundError extends DomainError` (→404) — code `CLASS_MODEL_NOT_FOUND`.
+2. `StockModelReadonlyError extends DomainError` (→409, code
+   `CLASS_MODEL_STOCK_READONLY`) — message directs the Organiser to clone the
+   model; thrown by both `update` and `delete`.
 3. `ReferencedClassModelError extends DomainError` (→409) — carries the
    referencing `CompetitionRef[]`.
 4. Reuse the shared `ValidationError` for name/shape failures (→400).
@@ -380,9 +437,9 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
 1. **Shared:** replace the `discipline` field in `Competition` with
    `classModelId: string`. In `competitionConfigurationFields`, replace the
    `discipline` enum with `classModelId: z.string().min(1, "A contest class is required")`.
-2. **Projection** (`competitions/projection.ts`): read
-   `classModelId = payload.classModelId ?? stockModelIdFor(payload.discipline)`
-   (legacy back-fill); store `classModelId`.
+2. **Projection** (`competitions/projection.ts`): store `classModelId` straight
+   from the payload. *(As built: no `?? stockModelIdFor(payload.discipline)`
+   legacy back-fill — green-field, `classModelId` is always present.)*
 3. **Service** (`competitions/service.ts`): validate `classModelId` exists via
    the injected `ClassModelProjection` (throw field-named `ValidationError` if
    not); build the competition with `classModelId`. **Re-key the discipline-change
@@ -393,7 +450,8 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
 ### Pivot ContestTemplate — `packages/shared/src/contest-template.ts` + base slice
 1. Replace `discipline` with `classModelId` on `ContestTemplate`, its create/
    update schemas (reuse the competition `classModelId` field), and the payload.
-2. **Projection** (`templates/projection.ts`): same legacy back-fill mapping.
+2. **Projection** (`templates/projection.ts`): store `classModelId` from the
+   payload (no legacy back-fill — as above).
 3. **Service** (`templates/service.ts`): validate `classModelId` exists;
    `createFromCompetition` copies `source.classModelId`; `seedCompetition`
    passes `template.classModelId` through to `CompetitionService.create`.
@@ -427,11 +485,10 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
    409/404/400 error bodies; F3B markers (AC4), F5L/F5J numbers (AC3), F5L owned
    table (AC2), six stock present + read-only flag (AC1).
 3. **Pivot existing suites:** update `competitions.*`, `templates.*`, and any
-   roster/reference tests asserting `discipline` to `classModelId`; add a
-   legacy-back-fill test (an old `competition.created`/`contestTemplate.created`
-   event with `discipline` resolves to the stock model). Remove/retire
-   `landing-tables.routes.test.ts` route coverage for the dropped endpoints
-   (keep service-level table-shape tests if the type is still exercised).
+   roster/reference tests asserting `discipline` to `classModelId`. *(No
+   legacy-back-fill test — the back-fill was not built; `classModelId` is
+   required on every event.)* Remove the retired `landing-tables` route/service
+   coverage for the dropped module.
 
 ### Create/confirm Global Error Mapping — `app.setErrorHandler`
 1. `ClassModelNotFoundError` → 404 `{code,message}`.
@@ -488,15 +545,17 @@ ContestClassModel --> ClassModelResponse : maps to (+derived deviations)
 4. **Functional — naming (AC10):** clone with a blank name → 400 field error;
    clone with a name already used by **any** model (stock or custom,
    case-insensitively, after trim) → 400; no model created in either case.
-5. **Data — back-fill fidelity:** every pre-existing `competition.created` /
-   `contestTemplate.created` event (carrying `discipline`) resolves through
-   `stockModelIdFor` to the correct stock model on rebuild; no log rewrite;
-   current state remains fully derivable from the log (D4).
+5. **Data — clean pivot (green-field):** `classModelId` is required on every new
+   `competition.created` / `contestTemplate.created` event and no bare
+   `discipline` is written; with no live data to preserve (CLAUDE.md) there is no
+   legacy-payload back-fill path. Current state remains fully derivable from the
+   log (D4).
 6. **Business-rule — house rule 1 (NFR-1):** stock numbers are transcribed
    **only** from `docs/requirements/rules/` and must not contravene them;
-   nullable `pointsPerSecond`/`landingTable` are used where a class fixes no
-   single value (F3B/F3K/F5K) — no placeholder numbers invented. No new consumer
-   introduces `switch (discipline)`; class shape is read from the model.
+   per-task nullable `pointsPerSecond`/`landingTable` (and `landingScored:false`)
+   are used where a task fixes no single value (F3B Distance/Speed, F3K, F5K) — no
+   placeholder numbers invented. No new consumer introduces `switch (discipline)`;
+   class shape is read from the model.
 7. **Business-rule — NFR-2:** adding a seventh class is achievable by appending
    one `STOCK_CLASS_MODELS` entry + its `stockModelIdFor` mapping — no change to
    the aggregate shape, existing data, or the other classes' behaviour.
