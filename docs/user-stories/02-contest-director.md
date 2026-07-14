@@ -69,14 +69,17 @@ outcome while reports remain available for anyone to read.
   read — [2.2](../requirements/high-level-requirements.md#area-2--competition-lifecycle)).
 - [ ] Given a locked competition, when its state is shown, then it is clearly
   marked as locked so no one mistakes it for still-editable.
-- [ ] Given a locked competition in which I find an error, when I **unlock** it,
-  then it returns to an editable state so a correction can be made — this is the
-  **Director's authority only**; no other role can unlock, and lock stays one-way
-  for everyone else.
-- [ ] Given I unlock (and later re-lock) a competition, when the action is
-  applied, then it is **attributable** to me so a post-lock correction stays
-  defensible, and any already-published result must be **re-published** after the
-  correction (see [7](#7--publish-official-results)).
+- [ ] **(Post-MVP — deferred.)** Given a locked competition in which I find an
+  error, when I **unlock** it, then it returns to an editable state so a
+  correction can be made — this is the **Director's authority only**; no other
+  role can unlock, and lock stays one-way for everyone else. *In the MVP,
+  **Locked is terminal** (state machine — STORY-001-024 / STORY-001-026): there is
+  no unlock edge. This criterion and the one below are held for a post-MVP
+  release.*
+- [ ] **(Post-MVP — deferred.)** Given I unlock (and later re-lock) a
+  competition, when the action is applied, then it is **attributable** to me so a
+  post-lock correction stays defensible, and any already-published result must be
+  **re-published** after the correction (see [7](#7--publish-official-results)).
 - [ ] Given the contest **ends early** (e.g. weather kills day two), when I lock
   it with fewer completed rounds than the **class rules' minimum for a valid
   contest** (per the [per-class rule docs](../requirements/rules/) — e.g. 4 for
@@ -89,10 +92,12 @@ outcome while reports remain available for anyone to read.
 
 **Traces to:** area 2.2 · users.md §2 Contest Director
 **Notes:** Lock is the Director's authority, **not** the Organiser's — the
-Organiser stories only *respect* the locked state. Unlock is **Director-only**
-and attributable; a correction made after unlocking forces a re-lock and a
-re-publish. **Publishing (7) requires a lock first**, so the official result is
-always a frozen snapshot — see [7](#7--publish-official-results).
+Organiser stories only *respect* the locked state. **Publishing (7) requires a
+lock first**, so the official result is always a frozen snapshot — see
+[7](#7--publish-official-results). **MVP scope:** Lock is **terminal** — there is
+no unlock in the MVP (STORY-001-024 / STORY-001-026). **Unlock** (Director-only,
+attributable) and the **re-lock → re-publish** correction cycle are **deferred to
+a post-MVP release**; the two criteria above are held until then.
 
 ---
 
@@ -523,11 +528,14 @@ Scorers confirm, or a Scorer marks *cannot make the group*) are not the Director
   classification order, winner first**, with **drop-worst applied** and
   **penalties retained** per the rules
   ([00-general-rules §5](../requirements/rules/00-general-rules.md)).
-- [ ] Given a published result that I later **correct** (unlock → correct →
-  re-lock, per [2.2](#22--lock-the-competition-against-further-changes)), when the
-  correction is made, then the earlier published result is superseded and I must
+- [ ] **(Post-MVP — deferred.)** Given a published result that I later
+  **correct** (unlock → correct → re-lock, per
+  [2.2](#22--lock-the-competition-against-further-changes)), when the correction
+  is made, then the earlier published result is superseded and I must
   **re-publish** so the official result matches the corrected, re-locked
-  computation.
+  computation. *Depends on unlock, which is **post-MVP** (Locked is terminal in
+  the MVP — STORY-001-024 / STORY-001-026); this criterion is held until unlock
+  lands.*
 - [ ] Given the contest is still proceeding, when a round completes, then its
   results are available to read as the contest proceeds
   ([00-general-rules §5](../requirements/rules/00-general-rules.md)); publishing
@@ -539,9 +547,10 @@ Scorers confirm, or a Scorer marks *cannot make the group*) are not the Director
 **Traces to:** area 7 · users.md §2 Contest Director
 **Notes:** **Handoff:** the Organiser *produces* reports
 ([7.1/7.3/7.2/7.4](01-organiser.md#71--produce-results-reports)); **publishing
-the official result is the Director's authority**. Publish **requires a lock**,
-and a post-lock correction forces a **re-publish**
-([2.2](#22--lock-the-competition-against-further-changes)). Output channels
+the official result is the Director's authority**. Publish **requires a lock**.
+A post-lock correction forcing a **re-publish** depends on **unlock**, which is
+**deferred to post-MVP** (Locked is terminal in the MVP —
+[2.2](#22--lock-the-competition-against-further-changes)). Output channels
 (PDF/CSV/online), email distribution and badges are **Future Enhancements** —
 publishing here means declaring the authoritative result, not a specific
 distribution mechanism.
@@ -581,21 +590,28 @@ capability (teams, jury/protest, series, fly-offs). Every story cites its area.
 
 Items 1–3 were raised in the first draft and have since been **resolved with the
 user**; the resolutions are reflected in the stories above. Item 4 needs no
-change and is flagged for per-discipline work.
+change and is flagged for per-discipline work. **Items 1–2 were subsequently
+re-scoped for the MVP** (see the deferral notes) once the lifecycle state machine
+(STORY-001-024) fixed **Locked as terminal**.
 
-1. **Lock reversibility (2.2) — resolved, applied.**
+1. **Lock reversibility (2.2) — resolved, then deferred to post-MVP.**
    [2.2](../requirements/high-level-requirements.md#area-2--competition-lifecycle)
-   defined lock but said nothing about **un-locking**. Resolution: the **Director
-   (only) may unlock** to make a late correction, with the unlock/re-lock recorded
-   as attributable; lock stays one-way for all other roles. Story
-   [2.2](#22--lock-the-competition-against-further-changes) is written to this.
+   defined lock but said nothing about **un-locking**. Original resolution: the
+   **Director (only) may unlock** to make a late correction, with the
+   unlock/re-lock recorded as attributable; lock stays one-way for all other
+   roles. **MVP re-scope:** the lifecycle state machine (STORY-001-024) and Lock &
+   Finalisation (STORY-001-026) make **Locked terminal** — there is **no unlock in
+   the MVP**. Unlock (Director-only, attributable) is **deferred to a post-MVP
+   release**; the deferred criteria in
+   [2.2](#22--lock-the-competition-against-further-changes) are held until then.
 
-2. **Lock vs publish ordering (2.2 / 7) — resolved, applied.** Resolution:
-   **results must be locked before they can be published**, so the official result
-   is always a frozen snapshot; if a competition is **corrected after lock**
-   (unlock → correct → re-lock), it **must be re-published**. Stories
+2. **Lock vs publish ordering (2.2 / 7) — resolved (kept), re-publish deferred.**
+   Resolution kept for the MVP: **results must be locked before they can be
+   published**, so the official result is always a frozen snapshot (stories
    [2.2](#22--lock-the-competition-against-further-changes) and
-   [7](#7--publish-official-results) are written to this.
+   [7](#7--publish-official-results) are written to this). The **corrected →
+   re-locked → re-published** cycle depends on **unlock** and is therefore
+   **deferred to post-MVP** alongside item 1.
 
 3. **Reinstatement and rounds flown while retired (5.5) — resolved, applied.**
    Resolution: a retired pilot's rounds **flown while they were retired** are
