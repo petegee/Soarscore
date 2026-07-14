@@ -9,6 +9,17 @@ function attributionFromHeaders(headers: Record<string, unknown>): Attribution {
   return { actorName, originClient, authority: "organiser" };
 }
 
+// Start Proceedings is a Contest-Director action (STORY-001-025): recorded with
+// contest-director authority — recorded, not enforced (D1). Mirrors the draw
+// route's cdAttributionFromHeaders idiom; deliberately not folded into the
+// app-wide organiser default above.
+function cdAttributionFromHeaders(headers: Record<string, unknown>): Attribution {
+  const actorName = typeof headers["x-actor-name"] === "string" ? headers["x-actor-name"] : "unknown";
+  const originClient =
+    typeof headers["x-client-id"] === "string" ? headers["x-client-id"] : "unknown-client";
+  return { actorName, originClient, authority: "contest-director" };
+}
+
 export function registerCompetitionRoutes(
   app: FastifyInstance,
   competitionService: CompetitionService,
@@ -24,6 +35,15 @@ export function registerCompetitionRoutes(
   // never-existed id 404s.
   app.get<{ Params: { id: string } }>("/api/competitions/:id/lifecycle", async (request) => {
     return competitionService.getLifecycleState(request.params.id);
+  });
+
+  // STORY-001-025: the single deliberate CD action opening a competition for
+  // running. 200 with the new LifecycleStateResponse on success; 409
+  // COMPETITION_NOT_READY (with details.outstandingItems) when not ready; 409
+  // TRANSITION_NOT_ALLOWED when not startable; 404 for a never-existed id.
+  app.post<{ Params: { id: string } }>("/api/competitions/:id/start", async (request) => {
+    const attribution = cdAttributionFromHeaders(request.headers as Record<string, unknown>);
+    return competitionService.start(request.params.id, attribution);
   });
 
   app.post("/api/competitions", async (request, reply) => {

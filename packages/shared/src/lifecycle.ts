@@ -27,7 +27,13 @@ export type SetupSubState =
 
 export type RunningSubState = "BetweenGroups" | "GroupInProgress";
 
-export type LifecycleAction = "Delete" | "Suspend" | "Resume" | "Lock" | "RoundAdvance";
+export type LifecycleAction =
+  | "Delete"
+  | "Suspend"
+  | "Resume"
+  | "Lock"
+  | "RoundAdvance"
+  | "Start";
 
 // The composite state: a sub-state is present only within its owning composite
 // (Setup ⇒ setupSubState; Running ⇒ runningSubState). Suspended/Locked/Deleted
@@ -36,6 +42,17 @@ export interface LifecycleState {
   state: LifecycleStateName;
   setupSubState?: SetupSubState;
   runningSubState?: RunningSubState;
+}
+
+// A single unmet Start prerequisite (STORY-001-025, AC2/AC3): a stable machine
+// code the companion switches on for localisation, plus a human-readable
+// operator-facing message. A flat DTO — never a class hierarchy. Additive-only
+// (NFR-2): the code union grows by appending members.
+export type OutstandingItemCode = "ROSTER_INCOMPLETE" | "DRAW_NOT_ACCEPTED";
+
+export interface OutstandingItem {
+  code: string;
+  message: string;
 }
 
 // Read DTO returned by GET /api/competitions/:id/lifecycle: the flattened state,

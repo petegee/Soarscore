@@ -128,6 +128,14 @@ export class LifecycleProjection {
     return this.deletedTombstones.has(competitionId);
   }
 
+  // STORY-001-025: true once competition.started is folded, and stays true
+  // while Suspended/Locked — i.e. genuinely past Start. Backs the config-
+  // authority boundary seam (StartStateProvider) with no change to getState /
+  // apply / rebuild.
+  isStarted(competitionId: string): boolean {
+    return this.started.has(competitionId);
+  }
+
   // The Setup readiness ladder, derived from existing roster/draw facts with a
   // deterministic left-fallback on staleness (AC2/AC3). "Roster complete" ≡ the
   // roster holds ≥ 1 entry — the concrete, class-agnostic definition (group-size

@@ -56,7 +56,9 @@ describe("LifecycleGuard — the single legality table", () => {
   });
 
   it("admissibleActions reports the current 'what may be done now' set", () => {
-    expect(guard.admissibleActions(setup)).toEqual(["Delete"]);
+    // STORY-001-025: a Setup/DrawAccepted competition now also admits Start,
+    // so it surfaces in the read-side set exactly when the transition succeeds.
+    expect(guard.admissibleActions(setup).sort()).toEqual(["Delete", "Start"]);
     expect(guard.admissibleActions(betweenGroups).sort()).toEqual(["Lock", "RoundAdvance", "Suspend"]);
     expect(guard.admissibleActions(groupInProgress)).toEqual([]);
     expect(guard.admissibleActions(suspended)).toEqual(["Resume"]);

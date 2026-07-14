@@ -23,6 +23,7 @@ import {
   NoScoresYetProvider,
   type CapturedScoresProvider,
   type LockStateProvider,
+  type StartStateProvider,
 } from "./competitions/state-providers.js";
 import { CompetitionService } from "./competitions/service.js";
 import {
@@ -30,6 +31,7 @@ import {
   CompetitionClassLockedError,
   CompetitionLockedError,
   CompetitionNotFoundError,
+  CompetitionNotReadyError,
 } from "./competitions/errors.js";
 import { TemplateProjection } from "./templates/projection.js";
 import { TemplateService } from "./templates/service.js";
@@ -95,6 +97,7 @@ import { registerScoringRoutes } from "./routes/scoring.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { LifecycleProjection } from "./lifecycle/projection.js";
 import { LifecycleGuard } from "./lifecycle/guard.js";
+import { ProjectionStartStateProvider } from "./lifecycle/start-state-provider.js";
 import { TransitionNotAllowedError } from "./lifecycle/errors.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -122,6 +125,10 @@ export interface AppOptions {
   // Test seam: the scoring story will supply a real provider; production
   // always uses NoEntryScoresYetProvider until captured scores exist.
   entryScoresProvider?: EntryScoresProvider;
+  // Override seam (tests can inject NotStartedProvider): production defaults to
+  // the lifecycle-backed ProjectionStartStateProvider (STORY-001-025), which
+  // flips the task-config authority attribution once proceedings have started.
+  startStateProvider?: StartStateProvider;
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
@@ -179,6 +186,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // interpreter of (state, action) shared by the delete path here and, in later
   // stories, by the owning suspend/resume/lock/round-advance services.
   const lifecycleGuard = new LifecycleGuard();
+  // The class-agnostic past-Start predicate seam (STORY-001-025): production
+  // reads real "started" membership from the lifecycle projection; tests may
+  // inject NotStartedProvider. Config modules consult it, never importing the
+  // lifecycle module (mirrors the draw/lock provider seams).
+  const startStateProvider =
+    options.startStateProvider ?? new ProjectionStartStateProvider(lifecycleProjection);
 
   const pilotService = new PilotService(
     eventStore,
@@ -251,6 +264,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     taskConfigProjection,
     competitionProjection,
     classModelProjection,
+    startStateProvider,
   );
 
   // Draw: specify a fair-draw policy, generate the fairest candidate over N
@@ -355,6 +369,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
         code: error.code,
         message: error.message,
         details: { reason: error.reason },
+      } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof CompetitionNotReadyError) {
+      reply.code(409).send({
+        code: error.code,
+        message: error.message,
+        details: { outstandingItems: error.outstandingItems },
       } satisfies ErrorResponse);
       return;
     }

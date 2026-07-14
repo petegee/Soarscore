@@ -13,9 +13,17 @@ import { TransitionNotAllowedError } from "./errors.js";
 //   Lock         ⇐ Running / BetweenGroups
 //   RoundAdvance ⇐ Running / BetweenGroups
 //   Resume       ⇐ Suspended
+//   Start        ⇐ Setup / DrawAccepted (STORY-001-025)
 //   Locked, Deleted are terminal — nothing is admissible from them.
 
-const ALL_ACTIONS: LifecycleAction[] = ["Delete", "Suspend", "Resume", "Lock", "RoundAdvance"];
+const ALL_ACTIONS: LifecycleAction[] = [
+  "Delete",
+  "Suspend",
+  "Resume",
+  "Lock",
+  "RoundAdvance",
+  "Start",
+];
 
 // Human-readable rejection reasons — operator-facing, revealing no internal
 // implementation detail (Norm 4).
@@ -25,6 +33,7 @@ const REJECTION_REASON: Record<LifecycleAction, string> = {
   Resume: "A competition can be resumed only while suspended",
   Lock: "A competition can be locked only while running between groups",
   RoundAdvance: "A round can be advanced only while running between groups",
+  Start: "Proceedings can be started only when the roster is complete and the draw accepted",
 };
 
 export class LifecycleGuard {
@@ -39,6 +48,15 @@ export class LifecycleGuard {
         return state.state === "Running" && state.runningSubState === "BetweenGroups";
       case "Resume":
         return state.state === "Suspended";
+      // STORY-001-025 (AC1/AC7): Start is admissible only from a Setup
+      // competition whose readiness ladder has reached DrawAccepted (roster
+      // complete AND draw accepted). Every other state — Running / Suspended /
+      // Locked / Deleted, or a Setup below DrawAccepted — is inadmissible here,
+      // so a double-start and a start from a terminal state fall out of the
+      // table for free. The readiness *list* is computed service-side; the
+      // guard stays a pure boolean with no class read (class-model law).
+      case "Start":
+        return state.state === "Setup" && state.setupSubState === "DrawAccepted";
       default:
         return false;
     }

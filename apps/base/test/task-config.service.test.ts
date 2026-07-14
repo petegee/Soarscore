@@ -7,6 +7,7 @@ import { ClassModelService } from "../src/class-models/service.js";
 import {
   AlwaysUnlockedProvider,
   NoScoresYetProvider,
+  NotStartedProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
 import { RosterProjection } from "../src/roster/projection.js";
@@ -49,6 +50,7 @@ function build() {
     taskConfigProjection,
     competitionProjection,
     classModelProjection,
+    new NotStartedProvider(),
   );
   const makeCompetition = (classModelId: string) =>
     competitionService.create(

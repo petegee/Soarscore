@@ -12,6 +12,7 @@ import {
 import type { EventStore } from "../eventstore/event-store.js";
 import type { CompetitionProjection } from "../competitions/projection.js";
 import type { ClassModelProjection } from "../class-models/projection.js";
+import type { StartStateProvider } from "../competitions/state-providers.js";
 import type { CompetitionTaskConfigProjection } from "./projection.js";
 import {
   CompetitionTaskConfigNotFoundError,
@@ -27,6 +28,9 @@ export class CompetitionTaskConfigService {
     private readonly projection: CompetitionTaskConfigProjection,
     private readonly competitionProjection: CompetitionProjection,
     private readonly classModelProjection: ClassModelProjection,
+    // STORY-001-025 (AC6, record-only): the class-agnostic past-Start predicate
+    // seam. Consulted to attribute the recorded authority; never to reject.
+    private readonly startState: StartStateProvider,
   ) {}
 
   // The merged view: the class model supplies the task list and defaults; the
@@ -86,11 +90,19 @@ export class CompetitionTaskConfigService {
       })),
     };
 
+    // Config-authority boundary (STORY-001-025, AC6 — RECORD-ONLY): past Start,
+    // the identical edit is stamped contest-director authority; in Setup it
+    // keeps the route-supplied organiser attribution. The base verifies and
+    // rejects nothing — the only observable before/after difference is the
+    // recorded authority string on taskConfig.updated (D1 trust model).
+    const effectiveAttribution: Attribution = this.startState.isStarted(competitionId)
+      ? { ...attribution, authority: "contest-director" }
+      : attribution;
     const record = this.eventStore.append({
       scope: competitionId,
       type: "taskConfig.updated",
       payload: taskConfigToPayload(config),
-      attribution,
+      attribution: effectiveAttribution,
     });
     this.projection.apply(record);
     return this.merge(competition, model, this.projection.getConfig(competitionId));

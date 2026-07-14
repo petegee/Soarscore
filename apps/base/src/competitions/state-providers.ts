@@ -23,3 +23,20 @@ export class NoScoresYetProvider implements CapturedScoresProvider {
     return false;
   }
 }
+
+// STORY-001-025: the class-agnostic "past-Start" predicate seam. A module that
+// keys off whether proceedings have started (the config-authority boundary)
+// consults this injected interface rather than importing the lifecycle module,
+// mirroring LockStateProvider / DrawStateProvider. This is the single adoption
+// point the remaining 3.5–3.8 config surfaces take up as they are built.
+export interface StartStateProvider {
+  isStarted(competitionId: string): boolean;
+}
+
+// Test stub: proceedings never started, so config edits keep organiser
+// attribution. Mirrors AlwaysUnlockedProvider.
+export class NotStartedProvider implements StartStateProvider {
+  isStarted(_competitionId: string): boolean {
+    return false;
+  }
+}

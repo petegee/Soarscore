@@ -7,6 +7,8 @@ import {
   type Attribution,
   type Competition,
   type LifecycleStateResponse,
+  type OutstandingItem,
+  type SetupSubState,
 } from "@soarscore/shared";
 import type { EventStore } from "../eventstore/event-store.js";
 import type { CompetitionProjection } from "./projection.js";
@@ -19,6 +21,7 @@ import {
   CompetitionClassLockedError,
   CompetitionLockedError,
   CompetitionNotFoundError,
+  CompetitionNotReadyError,
   ValidationError,
 } from "./errors.js";
 
@@ -180,6 +183,55 @@ export class CompetitionService {
       attribution,
     });
     this.projection.apply(record);
+  }
+
+  // Start Proceedings (STORY-001-025): the single deliberate CD action that
+  // transitions a competition from Setup to Running (BetweenGroups). Mirrors the
+  // delete command idiom — not-found → read state → readiness split → guard
+  // assert → append → apply → return the fresh read DTO. Appends exactly one
+  // event on success and none on any rejection (AC7).
+  start(id: string, attribution: Attribution): LifecycleStateResponse {
+    // Not-found: a never-existed id 404s; a Deleted tombstone falls through to
+    // the guard, which rejects Start from Deleted (AC7).
+    if (!this.projection.getById(id) && !this.lifecycleProjection.isDeleted(id)) {
+      throw new CompetitionNotFoundError(`Competition ${id} not found`);
+    }
+    const state = this.lifecycleProjection.getState(id);
+    // Readiness split (load-bearing): a Setup competition below DrawAccepted is
+    // blocked with the outstanding-prerequisite list (AC2/AC3) — the list is
+    // computed here, never in the pure guard. Every other state defers to the
+    // guard, which admits Setup/DrawAccepted and rejects the rest (AC7).
+    if (state.state === "Setup" && state.setupSubState !== "DrawAccepted") {
+      throw new CompetitionNotReadyError(
+        "The competition is not ready to start",
+        this.outstandingItemsFor(state.setupSubState ?? "Draft"),
+      );
+    }
+    this.lifecycleGuard.assertAdmissible(state, "Start");
+    const record = this.eventStore.append({
+      scope: SCOPE,
+      type: "competition.started",
+      payload: { competitionId: id },
+      attribution,
+    });
+    this.lifecycleProjection.apply(record);
+    return this.getLifecycleState(id);
+  }
+
+  // Derive the unmet Start prerequisites from the Setup readiness ladder — no
+  // new reads (STORY-001-025, AC2/AC3). Draft → both items; any rung below
+  // DrawAccepted → the draw item. The ladder forbids an accepted draw over an
+  // empty roster, so "draw not accepted" alone with an empty roster is
+  // unreachable (asserted in tests).
+  private outstandingItemsFor(subState: SetupSubState): OutstandingItem[] {
+    const items: OutstandingItem[] = [];
+    if (subState === "Draft") {
+      items.push({ code: "ROSTER_INCOMPLETE", message: "The roster is not complete" });
+    }
+    if (subState !== "DrawAccepted") {
+      items.push({ code: "DRAW_NOT_ACCEPTED", message: "The draw has not been accepted" });
+    }
+    return items;
   }
 }
 
