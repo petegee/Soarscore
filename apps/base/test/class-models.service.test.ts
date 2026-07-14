@@ -108,6 +108,48 @@ describe("ClassModelService — seed (AC1–AC4)", () => {
     expect(f3b.tasks[2]?.speedInverted).toBe(true);
     expect(f3b.tasks.every((t) => t.landingTable === null)).toBe(true);
   });
+
+  it("AC5: minimum-rounds-for-a-valid-contest is seeded per class in all three shapes", () => {
+    const { service } = buildService();
+    // Plain round-count minima (rounds only, no compound task requirement).
+    expect(service.get(stockModelIdFor("F3J")).minimumForValidContest).toEqual({ rounds: 4, tasks: null });
+    expect(service.get(stockModelIdFor("F5J")).minimumForValidContest).toEqual({ rounds: 4, tasks: null });
+    expect(service.get(stockModelIdFor("F5L")).minimumForValidContest).toEqual({ rounds: 4, tasks: null });
+    expect(service.get(stockModelIdFor("F3K")).minimumForValidContest).toEqual({ rounds: 5, tasks: null });
+    // F3B's compound "1 round AND 1 task" minimum.
+    expect(service.get(stockModelIdFor("F3B")).minimumForValidContest).toEqual({ rounds: 1, tasks: 1 });
+    // F5K has no minimum at all — null, distinct from a minimum of zero rounds.
+    expect(service.get(stockModelIdFor("F5K")).minimumForValidContest).toBeNull();
+  });
+
+  it("minimum-rounds is inherited verbatim on clone and is not an editable deviation", () => {
+    const { service } = buildService();
+    const clone = service.clone(stockModelIdFor("F3K"), { name: "F3K – local" }, attribution);
+    // Inherited from the source, and an independent object (no shared reference).
+    expect(clone.minimumForValidContest).toEqual({ rounds: 5, tasks: null });
+    expect(clone.minimumForValidContest).not.toBe(
+      service.get(stockModelIdFor("F3K")).minimumForValidContest,
+    );
+
+    // Editing the model preserves it verbatim — it is not part of the editable
+    // surface, so it never appears as a deviation.
+    service.update(
+      clone.id,
+      {
+        name: "F3K – local",
+        basis: clone.basis,
+        speedInverted: clone.speedInverted,
+        dropWorst: { threshold: 3, unit: "round" },
+        tasks: clone.tasks,
+        lonePilotBehaviour: clone.lonePilotBehaviour,
+      },
+      attribution,
+    );
+    const updated = service.get(clone.id);
+    expect(updated.minimumForValidContest).toEqual({ rounds: 5, tasks: null });
+    const { deviations } = service.getWithDeviations(clone.id);
+    expect(deviations.some((d) => d.field.startsWith("minimumForValidContest"))).toBe(false);
+  });
 });
 
 describe("ClassModelService — clone / edit (AC5–AC7)", () => {

@@ -19,9 +19,11 @@ import {
 } from "./class-models/errors.js";
 import { CompetitionProjection } from "./competitions/projection.js";
 import {
-  AlwaysUnlockedProvider,
   NoScoresYetProvider,
+  ProjectionFinalisationProgressProvider,
+  ProjectionLockStateProvider,
   type CapturedScoresProvider,
+  type FinalisationProgressProvider,
   type LockStateProvider,
   type StartStateProvider,
 } from "./competitions/state-providers.js";
@@ -108,9 +110,14 @@ export interface AppOptions {
   // Override seam (tests): production now defaults to the roster-backed
   // ProjectionRosterReferenceChecker (STORY-001-005 / RD1).
   referenceChecker?: RosterReferenceChecker;
-  // Test seam: the CD-lock story will supply a real provider; production always
-  // uses AlwaysUnlockedProvider until lock/unlock exists.
+  // Override seam (tests can inject AlwaysUnlockedProvider): production now
+  // defaults to the lifecycle-backed ProjectionLockStateProvider (STORY-001-026),
+  // which activates every freeze gate once a competition is genuinely Locked.
   lockStateProvider?: LockStateProvider;
+  // Override seam (tests inject a fixed-count stub to drive each finalisation
+  // outcome): production defaults to ProjectionFinalisationProgressProvider,
+  // reading the completed-round count from the lifecycle projection (STORY-001-026).
+  finalisationProgressProvider?: FinalisationProgressProvider;
   // Test seam: the scoring story will supply a real provider; production always
   // uses NoScoresYetProvider until captured scores exist.
   capturedScoresProvider?: CapturedScoresProvider;
@@ -222,10 +229,19 @@ export function buildApp(options: AppOptions): FastifyInstance {
     eventStore,
     competitionProjection,
     classModelProjection,
-    options.lockStateProvider ?? new AlwaysUnlockedProvider(),
+    // Real provider (STORY-001-026): answers the locked predicate from the
+    // authoritative lifecycle state, activating the update/delete/scoring freeze
+    // gates once a competition is genuinely Locked. AlwaysUnlockedProvider
+    // remains the tests' seam.
+    options.lockStateProvider ?? new ProjectionLockStateProvider(lifecycleProjection),
     options.capturedScoresProvider ?? new NoScoresYetProvider(),
     lifecycleProjection,
     lifecycleGuard,
+    // Real provider (STORY-001-026): reads the completed-round count folded from
+    // competition.roundAdvanced (0 until the round story emits it). Tests inject a
+    // fixed-count stub to drive each finalisation outcome.
+    options.finalisationProgressProvider ??
+      new ProjectionFinalisationProgressProvider(lifecycleProjection),
   );
 
   // After CompetitionService: the seed path delegates competition creation to

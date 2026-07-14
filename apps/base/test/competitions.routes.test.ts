@@ -155,4 +155,24 @@ describe("competition routes", () => {
     expect(updated.statusCode).toBe(200);
     expect(updated.json()).toMatchObject({ name: "Renamed", classModelId: F3J });
   });
+
+  // STORY-001-026: the Lock endpoint. A full 200 lock needs the whole
+  // start pipeline (Running/BetweenGroups); the service-level tests
+  // (competitions.lock.test.ts) cover every success/outcome path. Here we assert
+  // the route is wired and domain errors map centrally via setErrorHandler.
+  it("POST /lock on a Setup competition is 409 TRANSITION_NOT_ALLOWED", async () => {
+    const app = makeApp();
+    const id = await createCompetition(app);
+    const locked = await app.inject({ method: "POST", url: `/api/competitions/${id}/lock` });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().code).toBe("TRANSITION_NOT_ALLOWED");
+    expect(locked.json().details.attemptedAction).toBe("Lock");
+  });
+
+  it("POST /lock on a never-existed id is 404 COMPETITION_NOT_FOUND", async () => {
+    const app = makeApp();
+    const locked = await app.inject({ method: "POST", url: "/api/competitions/nope/lock" });
+    expect(locked.statusCode).toBe(404);
+    expect(locked.json().code).toBe("COMPETITION_NOT_FOUND");
+  });
 });

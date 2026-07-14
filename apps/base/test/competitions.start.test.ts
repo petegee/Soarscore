@@ -10,6 +10,7 @@ import {
   NoScoresYetProvider,
   NotStartedProvider,
   type StartStateProvider,
+  ZeroProgressProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
 import {
@@ -74,6 +75,7 @@ function build(rosterSize: number, draw: DrawState = {}) {
     new NoScoresYetProvider(),
     lifecycleProjection,
     new LifecycleGuard(),
+    new ZeroProgressProvider(),
   );
   const created = service.create(sample, attribution);
   competitionProjection.rebuild(eventStore.readAll());
@@ -191,6 +193,7 @@ describe("Config-authority boundary — task-config record-only (STORY-001-025, 
       new NoScoresYetProvider(),
       new LifecycleProjection(new RosterProjection(), new DrawProjection()),
       new LifecycleGuard(),
+      new ZeroProgressProvider(),
     );
     const taskConfigProjection = new CompetitionTaskConfigProjection();
     const service = new CompetitionTaskConfigService(

@@ -32,6 +32,11 @@ export class LifecycleProjection {
   // Retained so a deleted competition still reports Deleted — distinguishable
   // from never-existed, even though CompetitionProjection drops the row.
   private deletedTombstones = new Set<string>();
+  // Count of folded competition.roundAdvanced facts per competition — the
+  // completed-round tally the Lock finalisation guard reads (STORY-001-026).
+  // Additive-only (NFR-2): no emitter appends competition.roundAdvanced yet, so
+  // this stays 0 until the round story lands, then becomes live with no rework.
+  private completedRounds = new Map<string, number>();
   // Highest seq of a roster.* or draw.specSaved event per competition, and the
   // seq of the latest draw.generated — compared to derive candidate staleness
   // (left-fallback, AC3) deterministically from log ordering alone.
@@ -65,6 +70,11 @@ export class LifecycleProjection {
       }
       case "competition.locked": {
         this.locked.add(competitionIdOf(record));
+        break;
+      }
+      case "competition.roundAdvanced": {
+        const id = competitionIdOf(record);
+        this.completedRounds.set(id, (this.completedRounds.get(id) ?? 0) + 1);
         break;
       }
       case "group.opened": {
@@ -104,6 +114,7 @@ export class LifecycleProjection {
     this.locked = new Set();
     this.openGroups = new Map();
     this.deletedTombstones = new Set();
+    this.completedRounds = new Map();
     this.latestInputSeq = new Map();
     this.latestGeneratedSeq = new Map();
     for (const event of events) {
@@ -126,6 +137,22 @@ export class LifecycleProjection {
 
   isDeleted(competitionId: string): boolean {
     return this.deletedTombstones.has(competitionId);
+  }
+
+  // STORY-001-026: the already-folded Locked membership, exposed so the real
+  // ProjectionLockStateProvider answers the class-agnostic locked predicate from
+  // the authoritative lifecycle state (mirrors isStarted). No change to
+  // getState / apply / rebuild.
+  isLocked(competitionId: string): boolean {
+    return this.locked.has(competitionId);
+  }
+
+  // STORY-001-026: the completed-round tally folded from competition.roundAdvanced,
+  // read by the Lock finalisation guard. Returns 0 when none folded. Additive-only
+  // (NFR-2): no emitter appends the fact yet, so this reads 0 until the round story
+  // ships, then becomes live with no rework here.
+  completedRoundCount(competitionId: string): number {
+    return this.completedRounds.get(competitionId) ?? 0;
   }
 
   // STORY-001-025: true once competition.started is folded, and stays true

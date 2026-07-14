@@ -67,6 +67,9 @@ export class ClassModelProjection {
     return {
       ...model,
       dropWorst: { ...model.dropWorst },
+      minimumForValidContest: model.minimumForValidContest
+        ? { ...model.minimumForValidContest }
+        : null,
       tasks: model.tasks.map(copyTaskParameterSet),
     };
   }

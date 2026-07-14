@@ -8,6 +8,7 @@ import {
   AlwaysUnlockedProvider,
   NoScoresYetProvider,
   type CapturedScoresProvider,
+  ZeroProgressProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
 import {
@@ -44,6 +45,7 @@ function buildServices(capturedScores: CapturedScoresProvider = new NoScoresYetP
     capturedScores,
     lifecycleProjection,
     new LifecycleGuard(),
+    new ZeroProgressProvider(),
   );
   const projection = new TemplateProjection();
   const service = new TemplateService(

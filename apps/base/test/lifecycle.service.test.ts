@@ -7,6 +7,7 @@ import { ClassModelService } from "../src/class-models/service.js";
 import {
   AlwaysUnlockedProvider,
   NoScoresYetProvider,
+  ZeroProgressProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
 import { CompetitionNotFoundError } from "../src/competitions/errors.js";
@@ -38,6 +39,7 @@ function build() {
     new NoScoresYetProvider(),
     lifecycleProjection,
     new LifecycleGuard(),
+    new ZeroProgressProvider(),
   );
   // Rebuild the projection from the log on each append, mirroring the app's
   // append-stream feed (kept simple here for the seeded lifecycle facts).

@@ -35,6 +35,14 @@ export type LifecycleAction =
   | "RoundAdvance"
   | "Start";
 
+// The two recorded outcomes a Lock resolves the terminal Locked state into
+// (STORY-001-026): OfficialResults when the flown count meets the class minimum
+// (or the class fixes no minimum); NoContest when it falls short — locked, no
+// official results, all captured data and the full event log retained. A flat
+// additive string union (NFR-2), never a class; no discipline appears in the
+// vocabulary (CLAUDE.md class-model law).
+export type FinalisationOutcome = "OfficialResults" | "NoContest";
+
 // The composite state: a sub-state is present only within its owning composite
 // (Setup ⇒ setupSubState; Running ⇒ runningSubState). Suspended/Locked/Deleted
 // carry no sub-state.

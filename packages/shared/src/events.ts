@@ -5,6 +5,7 @@ import type { ContestClassModel, TaskParameterSet } from "./class-model.js";
 import type { ContestTemplate } from "./contest-template.js";
 import type { RosterEntry } from "./roster.js";
 import type { CompetitionTaskConfig } from "./task-config.js";
+import type { FinalisationOutcome } from "./lifecycle.js";
 import type {
   ApprovalStatus,
   DrawSpecification,
@@ -141,6 +142,9 @@ export function classModelToCreatedPayload(model: ContestClassModel): ClassModel
     speedInverted: model.speedInverted,
     dropWorst: { ...model.dropWorst },
     groupSizeMinimumClause: model.groupSizeMinimumClause,
+    minimumForValidContest: model.minimumForValidContest
+      ? { ...model.minimumForValidContest }
+      : null,
     tasks: model.tasks.map(copyTaskParameterSet),
     lonePilotBehaviour: model.lonePilotBehaviour,
   };
@@ -487,8 +491,18 @@ export interface CompetitionResumedPayload {
   competitionId: string;
 }
 
+// The terminal lock/finalisation fact (STORY-001-026). Lock and finalisation
+// happen atomically, so the resolved outcome rides this single event rather than
+// a separate competition.finalised. `outcome` and `completedRounds` are ADDITIVE
+// (NFR-2): a hypothetical older competition.locked without them must replay
+// without throwing — consumers default a missing `outcome` (treat as
+// unknown/legacy) rather than error, matching the acknowledgedWarningIds
+// default-on-read pattern. LifecycleProjection's fold reads only competitionId,
+// so it is unaffected by the additions.
 export interface CompetitionLockedPayload {
   competitionId: string;
+  outcome: FinalisationOutcome;
+  completedRounds: number;
 }
 
 export interface CompetitionRoundAdvancedPayload {

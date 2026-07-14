@@ -39,6 +39,27 @@ export interface DropWorstRule {
   unit: DropWorstUnit;
 }
 
+// The minimum a contest must reach to count as a *valid* contest — read at Lock
+// & Finalisation (STORY-001-026) to resolve a locked competition to
+// OfficialResults vs NoContest. Structured, not a bare integer, so the core can
+// interpret all three rule shapes generically without ever branching on
+// discipline (CLAUDE.md class-model law):
+//   • plain round-count minimum — `rounds` set, `tasks` null (F3J/F5J/F5L = 4,
+//     F3K = 5);
+//   • compound rounds-and-tasks minimum — both set (F3B = 1 round AND 1 task);
+//   • no minimum at all — the whole value is null (F5K), where finalising short
+//     is the Contest Director's judgement and always yields OfficialResults.
+// A `null` value is semantically distinct from `{ rounds: 0 }` — "no rule to
+// test against" is not "a minimum of zero". Rule-fixed identity metadata (house
+// rule 1) like groupSizeMinimumClause: preserved verbatim through clone/edit,
+// never user-editable.
+export interface MinimumForValidContest {
+  rounds: number;
+  // The compound task minimum (F3B's "and 1 task"); null where the class fixes
+  // a round count alone.
+  tasks: number | null;
+}
+
 // Capture granularity for a task's flight time (STORY-001-008 / AC2). This is
 // the *timing* precision — the step the field time is recorded to and whether
 // the residue rounds or is dropped — and is deliberately NOT the same quantity
@@ -135,6 +156,12 @@ export interface ContestClassModel {
   // Identity metadata like sourceClass — preserved verbatim through clone/edit,
   // never user-editable.
   groupSizeMinimumClause: string | null;
+  // The minimum-rounds-for-a-valid-contest threshold (STORY-001-016 AC5),
+  // read at Lock & Finalisation (STORY-001-026); null where the class fixes no
+  // minimum (F5K) and finalising short is the CD's judgement. Rule-fixed
+  // identity metadata — preserved verbatim through clone/edit, never editable.
+  // See MinimumForValidContest for the three shapes it can take.
+  minimumForValidContest: MinimumForValidContest | null;
   // The class's rule-fixed task parameters (STORY-001-008). One task for the
   // man-on-man classes, three for F3B, five for F5K. The flat pointsPerSecond /
   // landingTable that 016 stored are folded into these tasks (NFR-1).
@@ -282,6 +309,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     dropWorst: { threshold: 5, unit: "task" },
     // Shared by Duration/Distance/Speed (F3B.1.8 b).
     groupSizeMinimumClause: "F3B.1.8 b",
+    // Compound minimum: 1 completed round AND 1 completed task (f3b.md).
+    minimumForValidContest: { rounds: 1, tasks: 1 },
     // F3B annuls a one-valid-result group rather than pairing a dummy
     // (general-rules §3, f3b.md) — requires a CD override to substitute.
     lonePilotBehaviour: "annul",
@@ -341,6 +370,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     // classes (f3j.md).
     dropWorst: { threshold: 7, unit: "round" },
     groupSizeMinimumClause: "F3J.6.1",
+    // Minimum 4 completed rounds for a valid contest (f3j.md).
+    minimumForValidContest: { rounds: 4, tasks: null },
     lonePilotBehaviour: "dummy",
     tasks: [
       // 0.1 s timing (F3J.10.2), 1 pt/s, its 100→0 fine landing table (f3j.md).
@@ -376,6 +407,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     // Drop the lowest round once 6 or more rounds are flown (f3k.md).
     dropWorst: { threshold: 5, unit: "round" },
     groupSizeMinimumClause: "F3K.9.1",
+    // Minimum 5 completed rounds for a valid contest (f3k.md).
+    minimumForValidContest: { rounds: 5, tasks: null },
     lonePilotBehaviour: "dummy",
     tasks: [
       // 0.1 s truncated (F3K.7); flight-time only, no landing (F3K §2). The only
@@ -404,6 +437,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     // Drop-worst beyond 4 rounds (f5j.md).
     dropWorst: { threshold: 4, unit: "round" },
     groupSizeMinimumClause: "5.5.11.8",
+    // Minimum 4 completed rounds for a valid contest (f5j.md).
+    minimumForValidContest: { rounds: 4, tasks: null },
     lonePilotBehaviour: "dummy",
     tasks: [
       // Whole seconds truncated (5.5.11.12 b), 1 pt/s, its coarser 50→0 table
@@ -439,6 +474,9 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     dropWorst: { threshold: 6, unit: "round" },
     // F5K fixes no per-group minimum (AC6).
     groupSizeMinimumClause: null,
+    // F5K defines no minimum-rounds validity rule (f5k.md) — finalising short
+    // is the CD's judgement, always OfficialResults. Distinct from `rounds: 0`.
+    minimumForValidContest: null,
     lonePilotBehaviour: "dummy",
     // Tasks A–E (5.5.10.2). Same scoring shape per task; the round → task
     // schedule and per-task working times are deferred (per-discipline). Every
@@ -470,6 +508,8 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     dropWorst: { threshold: 5, unit: "round" },
     // F5L fixes no per-group minimum (AC6).
     groupSizeMinimumClause: null,
+    // Minimum 4 completed rounds for a valid contest (f5l.md).
+    minimumForValidContest: { rounds: 4, tasks: null },
     lonePilotBehaviour: "dummy",
     tasks: [
       // 2 pt/s (5.5.12.11.1), whole seconds truncated, the 100→0 fine table

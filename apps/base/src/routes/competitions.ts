@@ -46,6 +46,15 @@ export function registerCompetitionRoutes(
     return competitionService.start(request.params.id, attribution);
   });
 
+  // STORY-001-026: the single deliberate CD action sealing a running competition
+  // into the terminal Locked state, resolving OfficialResults vs NoContest. 200
+  // with the Locked LifecycleStateResponse on success; 409 TRANSITION_NOT_ALLOWED
+  // when not Running/BetweenGroups (incl. double-lock); 404 for a never-existed id.
+  app.post<{ Params: { id: string } }>("/api/competitions/:id/lock", async (request) => {
+    const attribution = cdAttributionFromHeaders(request.headers as Record<string, unknown>);
+    return competitionService.lock(request.params.id, attribution);
+  });
+
   app.post("/api/competitions", async (request, reply) => {
     const attribution = attributionFromHeaders(request.headers as Record<string, unknown>);
     const competition = competitionService.create(request.body, attribution);

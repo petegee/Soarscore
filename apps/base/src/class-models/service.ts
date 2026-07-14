@@ -104,6 +104,10 @@ export class ClassModelService {
       speedInverted: source.speedInverted,
       dropWorst: { ...source.dropWorst },
       groupSizeMinimumClause: source.groupSizeMinimumClause,
+      // Rule-fixed identity metadata — inherited verbatim, never editable.
+      minimumForValidContest: source.minimumForValidContest
+        ? { ...source.minimumForValidContest }
+        : null,
       // Deep-copy every task (precision, coefficients, penalties, owned table)
       // so the clone shares no nested object with its source (AC5).
       tasks: source.tasks.map(copyTaskParameterSet),
@@ -145,6 +149,10 @@ export class ClassModelService {
       speedInverted: parsed.speedInverted,
       dropWorst: { ...parsed.dropWorst },
       groupSizeMinimumClause: existing.groupSizeMinimumClause,
+      // Non-editable rule metadata — preserved verbatim over the same id.
+      minimumForValidContest: existing.minimumForValidContest
+        ? { ...existing.minimumForValidContest }
+        : null,
       // Preserve each task id where the edit kept one; mint otherwise — mirroring
       // the landing-table id handling so kept tasks diff positionally (AC2/AC5).
       tasks: parsed.tasks.map((task) => this.materialiseTask(task)),

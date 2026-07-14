@@ -9,6 +9,7 @@ import {
   NoScoresYetProvider,
   type CapturedScoresProvider,
   type LockStateProvider,
+  ZeroProgressProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
 import { RosterProjection } from "../src/roster/projection.js";
@@ -54,6 +55,7 @@ function buildService(
     capturedScores,
     lifecycleProjection,
     new LifecycleGuard(),
+    new ZeroProgressProvider(),
   );
   return { eventStore, projection, service };
 }

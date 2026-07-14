@@ -6,6 +6,7 @@ import {
   competitionToCreatedPayload,
   type Attribution,
   type Competition,
+  type FinalisationOutcome,
   type LifecycleStateResponse,
   type OutstandingItem,
   type SetupSubState,
@@ -13,7 +14,11 @@ import {
 import type { EventStore } from "../eventstore/event-store.js";
 import type { CompetitionProjection } from "./projection.js";
 import type { ClassModelProjection } from "../class-models/projection.js";
-import type { CapturedScoresProvider, LockStateProvider } from "./state-providers.js";
+import type {
+  CapturedScoresProvider,
+  FinalisationProgressProvider,
+  LockStateProvider,
+} from "./state-providers.js";
 import type { LifecycleProjection } from "../lifecycle/projection.js";
 import type { LifecycleGuard } from "../lifecycle/guard.js";
 import {
@@ -43,6 +48,10 @@ export class CompetitionService {
     // exposes the current state and what may be done now.
     private readonly lifecycleProjection: LifecycleProjection,
     private readonly lifecycleGuard: LifecycleGuard,
+    // STORY-001-026: the completed-round/task counts the Lock finalisation guard
+    // reads, through the seam so Lock is decoupled from the not-yet-built
+    // round/scoring emitters. Injected via AppOptions (the established idiom).
+    private readonly progress: FinalisationProgressProvider,
   ) {}
 
   list(): Competition[] {
@@ -216,6 +225,60 @@ export class CompetitionService {
     });
     this.lifecycleProjection.apply(record);
     return this.getLifecycleState(id);
+  }
+
+  // Lock & Finalisation (STORY-001-026): the single deliberate CD action that
+  // seals a Running/BetweenGroups competition into the terminal Locked state,
+  // resolving and recording the finalisation outcome. Mirrors the start() command
+  // idiom exactly — not-found → read state → guard assert → (new) resolve
+  // finalisation → append one enriched event → apply → return the fresh read DTO.
+  // Appends exactly one competition.locked event on success and none on any
+  // rejection. Lock is NEVER blocked by a short round count: the count only
+  // selects OfficialResults vs NoContest; a below-minimum contest still locks.
+  lock(id: string, attribution: Attribution): LifecycleStateResponse {
+    // Not-found: a never-existed id 404s; a Deleted tombstone falls through to
+    // the guard, which rejects Lock from Deleted.
+    if (!this.projection.getById(id) && !this.lifecycleProjection.isDeleted(id)) {
+      throw new CompetitionNotFoundError(`Competition ${id} not found`);
+    }
+    const state = this.lifecycleProjection.getState(id);
+    // Legality is the pure guard's alone: Lock is admissible only from
+    // Running/BetweenGroups, so Setup / GroupInProgress / Suspended / Locked /
+    // Deleted are rejected with TransitionNotAllowedError — a mid-group lock and
+    // a double-lock (Locked is terminal) fall out for free. Appends nothing on
+    // rejection.
+    this.lifecycleGuard.assertAdmissible(state, "Lock");
+    // Resolve the outcome ONCE at Lock and freeze it on the terminal event — a
+    // locked contest's round count is immutable, so no read-time re-derivation.
+    const outcome = this.resolveFinalisation(id);
+    const completedRounds = this.progress.completedRounds(id);
+    const record = this.eventStore.append({
+      scope: SCOPE,
+      type: "competition.locked",
+      payload: { competitionId: id, outcome, completedRounds },
+      attribution,
+    });
+    this.lifecycleProjection.apply(record);
+    return this.getLifecycleState(id);
+  }
+
+  // The class-agnostic minimum-rounds validity guard (STORY-001-026). Reads only
+  // the class model's minimumForValidContest scalar shape and the derived counts
+  // and compares generically — NO branch on discipline/sourceClass (CLAUDE.md
+  // class-model law). F3B's compound {rounds,tasks} and F5K's null are handled by
+  // the same predicate. Never conflates minimumForValidContest with
+  // dropWorst.threshold (different numbers).
+  private resolveFinalisation(competitionId: string): FinalisationOutcome {
+    const competition = this.get(competitionId);
+    const model = this.classModelProjection.getById(competition.classModelId);
+    const min = model?.minimumForValidContest ?? null;
+    // null is "no rule to test against" (F5K) — the CD's judgement, always
+    // OfficialResults. Must NOT collapse into { rounds: 0 }.
+    if (min === null) return "OfficialResults";
+    const roundsMet = this.progress.completedRounds(competitionId) >= min.rounds;
+    const tasksMet =
+      min.tasks === null || this.progress.completedTasks(competitionId) >= min.tasks;
+    return roundsMet && tasksMet ? "OfficialResults" : "NoContest";
   }
 
   // Derive the unmet Start prerequisites from the Setup readiness ladder — no

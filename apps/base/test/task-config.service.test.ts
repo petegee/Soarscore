@@ -8,6 +8,7 @@ import {
   AlwaysUnlockedProvider,
   NoScoresYetProvider,
   NotStartedProvider,
+  ZeroProgressProvider,
 } from "../src/competitions/state-providers.js";
 import { CompetitionService } from "../src/competitions/service.js";
 import { RosterProjection } from "../src/roster/projection.js";
@@ -43,6 +44,7 @@ function build() {
     new NoScoresYetProvider(),
     new LifecycleProjection(new RosterProjection(), new DrawProjection()),
     new LifecycleGuard(),
+    new ZeroProgressProvider(),
   );
   const taskConfigProjection = new CompetitionTaskConfigProjection();
   const service = new CompetitionTaskConfigService(
