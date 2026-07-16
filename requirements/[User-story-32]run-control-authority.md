@@ -25,25 +25,34 @@ minute remaining) and **add time** (each invocation adds one minute) — but it 
 **not** pause or shorten **working time or the landing window**, which run to
 their configured durations. The one control that reaches into a running working
 time is **abort**: a range hold or disruption lets the Contest Director abort the
-group, which **restarts from preparation** and **annuls** any times/metrics
-already captured for that group.
+group, which **restarts from preparation** and **annuls** any times/metrics —
+raw captures **and** any facts derived from them (e.g. a resolved lone-pilot
+dummy, a requested annulment override) — already recorded for that group; a
+re-flight of the group starts completely clean. Abort applies **only while the
+group is in working time**; once the **landing window** begins (the touchdown
+phase per D5/D9), abort no longer applies and the flight runs to touchdown as
+normal.
 
 Two further authorities sit here. First, the **prep confirmation gate** (5.0.4)
-pauses the countdown at one minute when not every pilot has a confirming device;
-the Contest Director releases it in one of **two distinct forms** — **"device
-offline"** (the blocking device shows offline on the base's group view via the
-companion client; the group proceeds with **no no-score**, and the device's
-buffered confirmation reconciles on sync) or **"pilot unconfirmed"** (device
-online, no confirmation; the group proceeds and that pilot takes a **no-score**,
-STORY-001-031). The system never converts a comms fault into a no-score on its
-own; the choice is the Director's and is recorded. Second, the **"advance anyway"
-override**: where the system has **blocked** a round advance (Area 6.4 — missing
-scores, unresolved no-scores or a granted-but-unflown re-flight), only the Contest
-Director may force it through, with defined consequences — missing scores become
-**flagged anomalies** for the end-of-contest validation pass (STORY-001-026),
-unresolved no-scores convert to **zeros** (STORY-001-031), and an unflown
-re-flight entitlement **lapses** (the original result stands, flagged). Every
-action is attributable (D1/D4).
+is a single **group-level** hold — it pauses the countdown at one minute
+whenever **any** pilot's device has not confirmed, and only releases once
+**every** pilot's device has; one unconfirmed device holds the whole group's
+start. For each device still blocking it, the Contest Director releases in one
+of **two distinct forms** — **"device offline"** (the blocking device shows
+offline on the base's group view via the companion client; the group proceeds
+with **no no-score**, and the device's buffered confirmation reconciles on
+sync) or **"pilot unconfirmed"** (device online, no confirmation; the group
+proceeds and that pilot takes a **no-score**, STORY-001-031). The system never
+converts a comms fault into a no-score on its own; the choice is the
+Director's and is recorded, per blocking device. Second, the **"advance
+anyway" override**: where the system has **blocked** a round advance (Area 6.4
+— missing scores, unresolved no-scores or a re-flight entitlement not yet
+flown, whether merely **prepared** or already **approved**), only the Contest
+Director may force it through, with defined consequences — missing scores
+become **flagged anomalies** for the end-of-contest validation pass
+(STORY-001-026), unresolved no-scores convert to **zeros** (STORY-001-031),
+and any not-yet-flown re-flight entitlement — prepared or approved — **lapses**
+(the original result stands, flagged). Every action is attributable (D1/D4).
 
 ### Business Value
 
@@ -85,18 +94,23 @@ action is attributable (D1/D4).
   invocation) — all on **preparation only**.
 - **The fixed-duration guard**: the Contest Director **cannot** pause or shorten
   working time or the landing window.
-- **Abort**: abort a group mid-working-time on a range hold/disruption — it
-  restarts from preparation and annuls any times/metrics already captured for the
-  group.
-- **Prep-gate release, two distinct forms**: **"device offline"** → group proceeds
-  with **no** no-score (buffered confirmation reconciles on sync); **"pilot
-  unconfirmed"** → group proceeds and that pilot takes a **no-score**. The system
-  never auto-converts a comms fault to a no-score; the chosen form and the
+- **Abort**: abort a group during **working time only** (not once the landing
+  window has begun) on a range hold/disruption — it restarts from preparation
+  and annuls **both** raw times/metrics **and** any derived scoring facts
+  (e.g. lone-pilot resolution, annulment-override requests) already recorded
+  for the group; a re-flight starts clean.
+- **Prep-gate release, a single group-level hold, two distinct release forms
+  per blocking device**: **"device offline"** → group proceeds with **no**
+  no-score (buffered confirmation reconciles on sync); **"pilot unconfirmed"**
+  → group proceeds and that pilot takes a **no-score**. The gate only clears
+  once every blocking device is confirmed or released. The system never
+  auto-converts a comms fault to a no-score; the chosen form and the
   pilots/devices involved are recorded.
 - **"Advance anyway" override** of a blocked round advance: missing scores →
-  flagged anomalies for the end-of-contest validation pass; unresolved no-scores →
-  zeros; unflown re-flight entitlement → lapses (original result stands, flagged).
-  Only the Contest Director may issue it; it is attributed to them.
+  flagged anomalies for the end-of-contest validation pass; unresolved no-scores
+  → zeros; any not-yet-flown re-flight entitlement — whether merely **prepared**
+  or already **approved** — → lapses (original result stands, flagged). Only
+  the Contest Director may issue it; it is attributed to them.
 - **Audit**: every run-control authority action is attributable to the Contest
   Director (D1/D4).
 
@@ -155,29 +169,40 @@ the two release forms are distinct actions and the chosen form (with the
 pilots/devices involved) is recorded — the system never converts a comms fault to
 a no-score on its own.
 
-#### AC6: Abort restarts from preparation and annuls captured data
-**Given** a range hold mid-working-time with some times/metrics already captured
-for the group
+#### AC6: Abort (working time only) restarts from preparation and annuls all captured data, raw and derived
+**Given** a range hold mid-**working-time** with some times/metrics already
+captured for the group, including a derived scoring fact (e.g. a resolved
+lone-pilot dummy)
 **When** the Contest Director aborts the group
 **Then** it restarts from **preparation** and the group's already-captured
-times/metrics are **annulled**.
+raw times/metrics **and** any derived scoring facts are **annulled**, so a
+re-flight starts clean; **and given** the same group has already progressed
+into the **landing window**, **when** an abort is attempted, **then** it is
+refused — abort applies only during working time, and the flight runs to
+touchdown as normal.
 
 #### AC7: "Advance anyway" routes each blocked item to its defined consequence
 **Given** a round advance the system has **blocked** because it lists a missing
-score, an unresolved no-score and a granted-but-unflown re-flight (Area 6.4)
+score, an unresolved no-score and a re-flight entitlement not yet flown (Area
+6.4) — whether that entitlement is merely **prepared** or already **approved**
 **When** the Contest Director issues an explicit **"advance anyway"** override
 **Then** the advance proceeds — the missing score becomes a **flagged anomaly**
 for the end-of-contest validation pass (STORY-001-026), the unresolved no-score
-converts to a **zero** (STORY-001-031), the unflown re-flight entitlement
-**lapses** with the original result standing (flagged) — and the override is
-attributed to the Contest Director; no other role can issue it.
+converts to a **zero** (STORY-001-031), the not-yet-flown re-flight entitlement
+**lapses** (prepared or approved alike) with the original result standing
+(flagged) — and the override is attributed to the Contest Director; no other
+role can issue it.
 
 #### Non-Functional Expectations
 - Run-control authority actions carry no knowledge of any specific competition
   class (CLAUDE.md class-model law) and operate on the base offline (D6).
 - Working time and the landing window are never shortened or paused by any
   authority action — only preparation is adjustable, and only abort reaches a
-  running working time (and only by discarding it).
+  running **working time** (and only by discarding it); abort does not apply
+  once the landing window has begun.
+- The prep-confirmation gate is a single group-level hold: it clears only
+  when every pilot's device has confirmed or been released by the Contest
+  Director; one outstanding device holds the whole group's start.
 
 ### INVEST Check
 

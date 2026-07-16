@@ -33,7 +33,7 @@ is attributable and recomputes immediately (D1/D4).
 
 The drop-worst thresholds and penalty amounts are **class properties** read from
 the Contest Class Model (STORY-001-016) — F5J drops the lowest round beyond 4, F3K
-beyond 6, F5K beyond 7, F5L beyond 5, F3J beyond 7, and F3B discards the lowest
+beyond 5, F5K beyond 6, F5L beyond 5, F3J beyond 7, and F3B discards the lowest
 partial per task beyond 5. The core applies "retain penalty across the drop"
 generically and never branches on discipline.
 
@@ -137,7 +137,7 @@ negative score.
 
 #### AC6: Drop-worst threshold is class-driven, not discipline-branched
 **Given** the same "penalty in a dropped round" situation in an F3K contest
-(drops beyond 6) and an F5L contest (drops beyond 5)
+(drops beyond 5) and an F5L contest (drops beyond 5)
 **When** each final result computes
 **Then** which round is dropped follows each class model's drop-worst threshold
 while the penalty-retained-across-the-drop behaviour is identical, with no
