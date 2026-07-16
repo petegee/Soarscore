@@ -155,7 +155,9 @@ export class ClassModelService {
         : null,
       // Preserve each task id where the edit kept one; mint otherwise — mirroring
       // the landing-table id handling so kept tasks diff positionally (AC2/AC5).
-      tasks: parsed.tasks.map((task) => this.materialiseTask(task)),
+      tasks: parsed.tasks.map((task, idx) =>
+        this.materialiseTask(task, existing.tasks[idx])
+      ),
       lonePilotBehaviour: parsed.lonePilotBehaviour,
     };
 
@@ -199,8 +201,9 @@ export class ClassModelService {
   // landing-table id where the edit kept them, mint otherwise. A table on a
   // time-only task is dropped, not persisted (AC4: landingScored=false neither
   // requires nor accepts a table); nlhCoefficients only ride an NLH-applicable
-  // task.
-  private materialiseTask(task: UpdateClassModelTask): TaskParameterSet {
+  // task. isDurationShaped is rule-fixed (STORY-001-044): preserved from the
+  // original task when present, or defaulted to true for new tasks.
+  private materialiseTask(task: UpdateClassModelTask, originalTask?: TaskParameterSet): TaskParameterSet {
     const landingTable =
       task.landingScored && task.landingTable
         ? {
@@ -223,6 +226,7 @@ export class ClassModelService {
       penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
       minGroupSize: task.minGroupSize,
       minGroupSizeAllCompetitorsFallback: task.minGroupSizeAllCompetitorsFallback,
+      isDurationShaped: originalTask?.isDurationShaped ?? true,
     };
   }
 

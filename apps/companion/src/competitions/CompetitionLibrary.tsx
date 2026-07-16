@@ -6,13 +6,14 @@ import { CompetitionForm, type CompetitionSubmitValues } from "./CompetitionForm
 import { RosterView } from "../roster/RosterView.js";
 import { DrawSpecView } from "../draw/DrawSpecView.js";
 import { DrawView } from "../draw/DrawView.js";
+import { RunControlView } from "../run-control/RunControlView.js";
 
 interface EditState {
   competition?: Competition;
 }
 
 // The competition-scoped sub-views hosted by the per-competition sub-nav.
-type OpenView = "roster" | "draw-spec" | "draw";
+type OpenView = "roster" | "draw-spec" | "draw" | "run-control";
 
 export function CompetitionLibrary({ actor }: { actor: Actor }) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -193,6 +194,13 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
             disabled={open.view === "draw"}
           >
             Draw
+          </button>{" "}
+          <button
+            className="btn btn-small"
+            onClick={() => setOpen({ id: open.id, view: "run-control" })}
+            disabled={open.view === "run-control"}
+          >
+            Run control
           </button>
         </div>
         {open.view === "roster" && (
@@ -203,6 +211,9 @@ export function CompetitionLibrary({ actor }: { actor: Actor }) {
         )}
         {open.view === "draw" && (
           <DrawView competitionId={open.id} actor={actor} onBack={() => setOpen(null)} />
+        )}
+        {open.view === "run-control" && (
+          <RunControlView competitionId={open.id} actor={actor} onBack={() => setOpen(null)} />
         )}
       </div>
     );

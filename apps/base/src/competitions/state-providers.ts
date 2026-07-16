@@ -100,3 +100,58 @@ export class NotStartedProvider implements StartStateProvider {
     return false;
   }
 }
+
+// STORY-001-043: the no-score-outstanding consumption seam. A module that
+// queries which no-scores remain genuinely resolvable for a round consults this
+// injected interface. The seam contract: one method returning an array of
+// outstanding items, matching the granularity of every existing provider in this
+// file (one method, no inheritance). STORY-001-031 supplies the real implementation;
+// this story's stub is retained as the tests' seam.
+export interface NoScoreOutstandingProvider {
+  outstandingNoScores(competitionId: string, roundNumber: number): NoScoreOutstandingItem[];
+}
+
+// Plain data shape returned by the no-score-outstanding seam — denormalised with
+// pilot name for human-readable gate messages.
+export interface NoScoreOutstandingItem {
+  rosterEntryId: string;
+  pilotName: string;
+  groupFlyingOrder: number;
+  taskName: string;
+}
+
+// STORY-001-031 not yet built: the no-op stub, retained as the tests' seam.
+// Returns an empty array (no outstanding no-scores), allowing the gate to pass
+// until the real implementation wires in the genuinely-resolvable predicate.
+export class NothingOutstandingNoScoreProvider implements NoScoreOutstandingProvider {
+  outstandingNoScores(_competitionId: string, _roundNumber: number): NoScoreOutstandingItem[] {
+    return [];
+  }
+}
+
+// STORY-001-043: the re-flight-outstanding consumption seam. A module that
+// queries which granted re-flights remain unflown for a round consults this
+// injected interface. The seam contract: one method returning an array of
+// outstanding items, matching the granularity of every existing provider in this
+// file. STORY-001-028 supplies the real implementation; this story's stub is
+// retained as the tests' seam.
+export interface ReflightOutstandingProvider {
+  outstandingReflights(competitionId: string, roundNumber: number): ReflightOutstandingItem[];
+}
+
+// Plain data shape returned by the re-flight-outstanding seam — denormalised with
+// pilot name for human-readable gate messages.
+export interface ReflightOutstandingItem {
+  rosterEntryId: string;
+  pilotName: string;
+  taskName: string;
+}
+
+// STORY-001-028 not yet built: the no-op stub, retained as the tests' seam.
+// Returns an empty array (no outstanding re-flights), allowing the gate to pass
+// until the real implementation wires in the approved-but-unflown predicate.
+export class NothingOutstandingReflightProvider implements ReflightOutstandingProvider {
+  outstandingReflights(_competitionId: string, _roundNumber: number): ReflightOutstandingItem[] {
+    return [];
+  }
+}

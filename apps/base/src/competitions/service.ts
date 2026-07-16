@@ -18,7 +18,13 @@ import type {
   CapturedScoresProvider,
   FinalisationProgressProvider,
   LockStateProvider,
+  NoScoreOutstandingProvider,
+  ReflightOutstandingProvider,
 } from "./state-providers.js";
+import type { ScoreCompletenessProvider } from "../scoring/completeness-provider.js";
+import type { RosterProjection } from "../roster/projection.js";
+import type { GroupCompositionProvider } from "../draw/group-composition-provider.js";
+import type { PilotLibraryProjection } from "../pilots/projection.js";
 import type { LifecycleProjection } from "../lifecycle/projection.js";
 import type { LifecycleGuard } from "../lifecycle/guard.js";
 import {
@@ -52,6 +58,28 @@ export class CompetitionService {
     // reads, through the seam so Lock is decoupled from the not-yet-built
     // round/scoring emitters. Injected via AppOptions (the established idiom).
     private readonly progress: FinalisationProgressProvider,
+    // STORY-001-043: the round-boundary completeness gate's injection seam for
+    // no-score and re-flight outstanding items. Wired via AppOptions with no-op
+    // stubs today; STORY-001-031 and STORY-001-028 supply real implementations.
+    private readonly noScoreOutstanding: NoScoreOutstandingProvider,
+    private readonly reflightOutstanding: ReflightOutstandingProvider,
+    // STORY-001-043: the score-completeness seam, decoupling the round gate from
+    // the scoring module. Wired via AppOptions; a test stub or real projection
+    // implementation is injected.
+    private readonly scoreCompleteness: ScoreCompletenessProvider,
+    // STORY-001-043: the roster projection, needed to resolve rosterEntryId →
+    // pilotName for every outstanding-item message. Injected via AppOptions,
+    // reusing the existing roster reference already pulled in by draw/scoring.
+    private readonly rosterProjection: RosterProjection,
+    // STORY-001-043: the draw/group-composition seam. Reused here to answer
+    // getEffectiveGroups for the round-boundary completeness scan over each
+    // task. Already injected elsewhere (scoring service); this story uses it to
+    // iterate over seated pilots per round/task/group.
+    private readonly groupComposition: GroupCompositionProvider,
+    // STORY-001-043: the pilot library projection for resolving pilotId →
+    // pilotName when building outstanding-item messages. Needed to provide
+    // human-readable pilot names in the gate's output.
+    private readonly pilotProjection: PilotLibraryProjection,
   ) {}
 
   list(): Competition[] {
@@ -279,6 +307,125 @@ export class CompetitionService {
     const tasksMet =
       min.tasks === null || this.progress.completedTasks(competitionId) >= min.tasks;
     return roundsMet && tasksMet ? "OfficialResults" : "NoContest";
+  }
+
+  // Advance Round (STORY-001-043): the single deliberate Announcer/Timekeeper
+  // action that advances a running competition past a completed round's score-
+  // completeness gate. Mirrors the start() and lock() command idioms exactly —
+  // not-found → read state → readiness split → guard assert → append one event
+  // on success → apply → return the fresh read DTO. Appends exactly one
+  // competition.roundAdvanced event on success and none on any rejection (AC4).
+  advanceRound(id: string, attribution: Attribution): LifecycleStateResponse {
+    // Not-found: a never-existed id 404s; a Deleted tombstone falls through to
+    // the guard, which rejects RoundAdvance from Deleted (AC2).
+    if (!this.projection.getById(id) && !this.lifecycleProjection.isDeleted(id)) {
+      throw new CompetitionNotFoundError(`Competition ${id} not found`);
+    }
+    const state = this.lifecycleProjection.getState(id);
+    // The previous round is always derived server-side, never client-supplied
+    // (Key Design Decision). Derived from the completed-round count folded from
+    // the immutable event log (replayable, audit-safe).
+    const previousRound = this.progress.completedRounds(id) + 1;
+    // Readiness split: compute the outstanding items for the previous round and
+    // block if any exist. The list is computed here via a pure read, never
+    // appending an event and never triggering a scoring recompute (AC5).
+    const items = this.outstandingItemsForRoundAdvance(id, previousRound);
+    if (items.length > 0) {
+      throw new CompetitionNotReadyError("Round " + previousRound + " is not yet complete", items);
+    }
+    // Legality: RoundAdvance is admissible only from Running/BetweenGroups (AC3),
+    // so Setup / GroupInProgress / Suspended / Locked / Deleted are rejected
+    // with TransitionNotAllowedError. Appends nothing on rejection.
+    this.lifecycleGuard.assertAdmissible(state, "RoundAdvance");
+    const record = this.eventStore.append({
+      scope: SCOPE,
+      type: "competition.roundAdvanced",
+      payload: { competitionId: id, roundNumber: previousRound },
+      attribution,
+    });
+    this.lifecycleProjection.apply(record);
+    return this.getLifecycleState(id);
+  }
+
+  // Derive the outstanding items that block round advancement (STORY-001-043):
+  // score-missing captures, unresolved no-scores, and unflown granted re-flights.
+  // Pure reads only — never appends an event and never calls ScoringService
+  // .getGroupScore or any method that triggers a recompute (AC5, Safeguard 3/5).
+  // Respects class-agnosticism (CLAUDE.md): loops over model.tasks and reads
+  // group compositions per task, never branching on discipline.
+  private outstandingItemsForRoundAdvance(competitionId: string, roundNumber: number): OutstandingItem[] {
+    const items: OutstandingItem[] = [];
+
+    // Read the competition's contest class model to get the task list.
+    const competition = this.get(competitionId);
+    const model = this.classModelProjection.getById(competition.classModelId);
+    if (!model) {
+      // Defensive: a competition always has a valid class model
+      // (assertClassModelExists guards creation/update), so this is unreachable.
+      // Return empty items list to be conservative if the projection is stale.
+      return items;
+    }
+
+    // Score-missing items: for each task in the model, scan each effective group
+    // and report any seated pilot missing a captured result for this round/task.
+    for (const task of model.tasks) {
+      const groups = this.groupComposition.getEffectiveGroups(competitionId, roundNumber, task.id);
+      for (const group of groups) {
+        // Make one batched call per group, passing the whole group's seated
+        // rosterEntryIds in a single array argument, never one call per seat.
+        const seatedIds = group.members.map((m) => m.rosterEntryId);
+        const uncapturedIds = this.scoreCompleteness.uncapturedSeats(
+          competitionId,
+          roundNumber,
+          task.id,
+          group.flyingOrder,
+          seatedIds,
+        );
+        // For each uncaptured seat, resolve the pilot name via the roster
+        // projection and pilot library, then push one SCORE_MISSING item.
+        for (const rosterEntryId of uncapturedIds) {
+          const entry = this.rosterProjection.getEntry(competitionId, rosterEntryId);
+          const pilot = entry ? this.pilotProjection.getById(entry.pilotId) : null;
+          const pilotName = pilot?.name ?? "unknown";
+          items.push({
+            code: "SCORE_MISSING",
+            message: `${pilotName}'s flight in Group ${group.flyingOrder} (${task.name}) was not captured`,
+          });
+        }
+      }
+    }
+
+    // No-score-unresolved items: ask the no-score outstanding provider which
+    // no-scores remain genuinely resolvable for this round, and report each as
+    // a message with pilot name embedded.
+    const noScoreItems = this.noScoreOutstanding.outstandingNoScores(competitionId, roundNumber);
+    for (const item of noScoreItems) {
+      const entry = this.rosterProjection.getEntry(competitionId, item.rosterEntryId);
+      const pilot = entry ? this.pilotProjection.getById(entry.pilotId) : null;
+      const pilotName = pilot?.name ?? "unknown";
+      items.push({
+        code: "NO_SCORE_UNRESOLVED",
+        message: `${pilotName}'s no-score in Group ${item.groupFlyingOrder} (${item.taskName}) is unresolved`,
+      });
+    }
+
+    // Re-flight-unflown items: ask the re-flight outstanding provider which
+    // granted re-flights remain unflown for this round, and report each with
+    // pilot name embedded.
+    const reflightItems = this.reflightOutstanding.outstandingReflights(competitionId, roundNumber);
+    for (const item of reflightItems) {
+      const entry = this.rosterProjection.getEntry(competitionId, item.rosterEntryId);
+      const pilot = entry ? this.pilotProjection.getById(entry.pilotId) : null;
+      const pilotName = pilot?.name ?? "unknown";
+      items.push({
+        code: "REFLIGHT_UNFLOWN",
+        message: `${pilotName}'s granted re-flight (${item.taskName}) has not yet been flown`,
+      });
+    }
+
+    // Return the concatenated flat list — order: score-missing, then no-score,
+    // then re-flight (stable, deterministic order for tests and companion display).
+    return items;
   }
 
   // Derive the unmet Start prerequisites from the Setup readiness ladder — no

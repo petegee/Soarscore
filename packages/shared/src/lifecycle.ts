@@ -56,7 +56,12 @@ export interface LifecycleState {
 // code the companion switches on for localisation, plus a human-readable
 // operator-facing message. A flat DTO — never a class hierarchy. Additive-only
 // (NFR-2): the code union grows by appending members.
-export type OutstandingItemCode = "ROSTER_INCOMPLETE" | "DRAW_NOT_ACCEPTED";
+export type OutstandingItemCode =
+  | "ROSTER_INCOMPLETE"
+  | "DRAW_NOT_ACCEPTED"
+  | "SCORE_MISSING"
+  | "NO_SCORE_UNRESOLVED"
+  | "REFLIGHT_UNFLOWN";
 
 export interface OutstandingItem {
   code: string;

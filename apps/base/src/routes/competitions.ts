@@ -20,6 +20,16 @@ function cdAttributionFromHeaders(headers: Record<string, unknown>): Attribution
   return { actorName, originClient, authority: "contest-director" };
 }
 
+// Round Advance is an Announcer/Timekeeper action (STORY-001-043): recorded with
+// announcer-timekeeper authority — recorded, not enforced (D1). Mirrors the
+// cdAttributionFromHeaders idiom; a fresh authority string introduced by this story.
+function atAttributionFromHeaders(headers: Record<string, unknown>): Attribution {
+  const actorName = typeof headers["x-actor-name"] === "string" ? headers["x-actor-name"] : "unknown";
+  const originClient =
+    typeof headers["x-client-id"] === "string" ? headers["x-client-id"] : "unknown-client";
+  return { actorName, originClient, authority: "announcer-timekeeper" };
+}
+
 export function registerCompetitionRoutes(
   app: FastifyInstance,
   competitionService: CompetitionService,
@@ -53,6 +63,17 @@ export function registerCompetitionRoutes(
   app.post<{ Params: { id: string } }>("/api/competitions/:id/lock", async (request) => {
     const attribution = cdAttributionFromHeaders(request.headers as Record<string, unknown>);
     return competitionService.lock(request.params.id, attribution);
+  });
+
+  // STORY-001-043: the single deliberate Announcer/Timekeeper action advancing
+  // the contest past the previous round's completeness gate. 200 with the new
+  // LifecycleStateResponse on success; 409 COMPETITION_NOT_READY (with
+  // details.outstandingItems) when the previous round is incomplete; 409
+  // TRANSITION_NOT_ALLOWED when not Running/BetweenGroups; 404 for a
+  // never-existed id.
+  app.post<{ Params: { id: string } }>("/api/competitions/:id/round-advance", async (request) => {
+    const attribution = atAttributionFromHeaders(request.headers as Record<string, unknown>);
+    return competitionService.advanceRound(request.params.id, attribution);
   });
 
   app.post("/api/competitions", async (request, reply) => {

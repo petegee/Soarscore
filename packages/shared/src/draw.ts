@@ -278,11 +278,17 @@ export interface GroupSplitPayload {
   movedRosterEntryIds: string[];
 }
 
-// A Contest-Director-authority decision this story only ever *records as
-// pending*, never grants (Safeguard 6) — approval itself is a future story's
-// action. This union has exactly one member for that reason; a future story
-// adds "approved"/"rejected" as its own supersede event, not an edit here.
-export type ApprovalStatus = "pending-contest-director-approval";
+// A Contest-Director-authority decision's status: pending CD approval, approved,
+// declined, or lapsed (STORY-001-032). The full union is fixed as of this canvas
+// (user-confirmed, 202607160945) so STORY-001-028 implements against it as a
+// stable contract. Additive-only (NFR-2) — no existing member renamed; "lapsed"
+// is applied only as a side-effect of roundAdvance.overridden's fold, never as a
+// direct CD action (that would collide with STORY-001-028's approve/decline surface).
+export type ApprovalStatus =
+  | "pending-contest-director-approval"
+  | "approved"
+  | "declined"
+  | "lapsed";
 
 // A re-flight prepared for one entitled pilot: a new re-flyer group filled to
 // the task's resolved minimum by random draw from eligible others (AC3/AC4).

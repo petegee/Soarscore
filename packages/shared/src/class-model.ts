@@ -133,6 +133,11 @@ export interface TaskParameterSet {
   // minimum regardless of roster size — the draw may permit groupsPerRound = 1
   // for that reason alone, not just via the Organiser's spare-scorer override.
   minGroupSizeAllCompetitorsFallback: boolean;
+  // Whether this task runs the automatic phased sequence (STORY-001-040)
+  // or is manual-run with no automated countdown/callouts/prep-gate
+  // (STORY-001-044). Rule-fixed, derived from the task's own shape, never
+  // an operator/competition-config choice (Area 3.8, D10).
+  isDurationShaped: boolean;
 }
 
 export interface ContestClassModel {
@@ -288,6 +293,9 @@ function stockTask(
     // only where its rule doc states one (transcribed with a citation below).
     minGroupSize: null,
     minGroupSizeAllCompetitorsFallback: false,
+    // Default: duration-shaped (working-time tasks). Each model/task overrides
+    // if it's manual-run (F3B Distance/Speed, F3K all-up).
+    isDurationShaped: true,
     ...partial,
   };
 }
@@ -331,18 +339,21 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
       }),
       // Task B Distance: integer count of full 150 m legs, partial legs not
       // counted (f3b.md Task B) — a whole-unit truncated measure, no pt/s rate.
+      // Manual-run (STORY-001-044): no automated phase sequence.
       stockTask({
         id: `${stockModelIdFor("F3B")}-task-distance`,
         name: "Distance",
         timingPrecision: WHOLE_SECOND_TRUNCATED,
         // Min 3 per group for Distance (F3B.1.8b).
         minGroupSize: 3,
+        isDurationShaped: false,
         penaltyTypes: [
           { code: "winch-non-conforming", label: "Non-conforming winch", defaultDeduction: 1000 },
         ],
       }),
       // Task C Speed: 4 × 150 m legs to at least 1/100 s, fastest = best
       // (f3b.md Task C). Safety-plane crossing −300 is Task C only.
+      // Manual-run (STORY-001-044): no automated phase sequence.
       stockTask({
         id: `${stockModelIdFor("F3B")}-task-speed`,
         name: "Speed",
@@ -351,6 +362,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         // Min 8 per group for Speed, or all competitors in one group (F3B.1.8b).
         minGroupSize: 8,
         minGroupSizeAllCompetitorsFallback: true,
+        isDurationShaped: false,
         penaltyTypes: [
           { code: "safety-plane", label: "Safety-plane crossing", defaultDeduction: 300 },
           { code: "winch-non-conforming", label: "Non-conforming winch", defaultDeduction: 1000 },
@@ -413,6 +425,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
     tasks: [
       // 0.1 s truncated (F3K.7); flight-time only, no landing (F3K §2). The only
       // MVP task whose working time the organiser may reduce (F3K.11).
+      // Manual-run (STORY-001-044): no automated phase sequence.
       stockTask({
         id: `${stockModelIdFor("F3K")}-task`,
         name: "Flight time",
@@ -420,6 +433,7 @@ export const STOCK_CLASS_MODELS: ContestClassModel[] = [
         perRoundOverrideAllowed: true,
         // Min 5 per group (F3K.9.1).
         minGroupSize: 5,
+        isDurationShaped: false,
         penaltyTypes: [
           { code: "outside-window", label: "Flying outside the assigned window", defaultDeduction: 100 },
         ],

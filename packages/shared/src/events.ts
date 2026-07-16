@@ -125,6 +125,7 @@ export function copyTaskParameterSet(task: TaskParameterSet): TaskParameterSet {
     penaltyTypes: task.penaltyTypes.map((p) => ({ ...p })),
     minGroupSize: task.minGroupSize,
     minGroupSizeAllCompetitorsFallback: task.minGroupSizeAllCompetitorsFallback,
+    isDurationShaped: task.isDurationShaped,
   };
 }
 
@@ -457,9 +458,12 @@ export type ScoringEventPayload =
 // does NOT originate these events. Their emission is owned by other stories —
 // competition.started (STORY-001-025), competition.suspended/resumed
 // (STORY-001-013), competition.locked (the Lock story), group.opened/scored
-// (STORY-001-011 / Area 6), competition.roundAdvanced (the round story). This
-// story ships only the type declarations so those owning stories emit
-// consistently, and consumes them in its LifecycleProjection when present.
+// (STORY-001-044 — the single deliberate group-start action; group.opened is
+// operator-attributed, group.scored is system-emitted, reactively, on both the
+// duration-shaped and manual-run paths — see STORY-001-044's canvas Approach §3),
+// competition.roundAdvanced (the round story). This story ships only the type
+// declarations so those owning stories emit consistently, and consumes them in
+// its LifecycleProjection when present.
 //
 // Scope convention (matching the rest of this file): registry-level lifecycle
 // facts (started / suspended / resumed / locked / roundAdvanced) file under the
@@ -513,12 +517,14 @@ export interface CompetitionRoundAdvancedPayload {
 export interface GroupOpenedPayload {
   competitionId: string;
   roundNumber: number;
+  taskId: string;
   groupFlyingOrder: number;
 }
 
 export interface GroupScoredPayload {
   competitionId: string;
   roundNumber: number;
+  taskId: string;
   groupFlyingOrder: number;
 }
 
@@ -530,3 +536,161 @@ export type LifecycleEventPayload =
   | CompetitionRoundAdvancedPayload
   | GroupOpenedPayload
   | GroupScoredPayload;
+
+// Per-competition run-control events (STORY-001-032). Contest Director actions
+// on a live group: pause/resume/fast-forward/add-time on preparation,
+// abort (group restart + annulment), gate releases (device offline / pilot
+// unconfirmed), and round advance override. All filed under scope = competitionId,
+// same as draw.*, scoring.*, and lifecycle.* content-level events.
+//
+// Resolved decisions reflected in these payloads (user-confirmed, 202607160945):
+// - The prep-confirmation gate is a single group-level hold (prepGateHeld
+//   boolean backed by blockingDeviceIds); it clears only when that set is empty.
+//   Each device is released individually (its own event) but the group does not
+//   proceed to working time until every blocking device has been resolved.
+// - abort is legal only when phase === "WorkingTime" — never during Preparation
+//   (nothing to abort) or Landing (abort no longer applies once landing has begun).
+// - AnnulledFactRef.factType spans both raw captures (scoring.resultCaptured)
+//   and derived scoring facts (scoring.lonePilotResolved,
+//   scoring.annulmentOverrideRequested) — a full annulment, not raw-captures-only.
+// - OutstandingItemResolution's "reflight-lapsed" applies to a not-yet-flown
+//   re-flight entitlement in either ApprovalStatus state ("pending-contest-director-
+//   approval" or "approved"), not approved-only.
+
+export type GroupRunEventType =
+  | "groupRun.prepPaused"
+  | "groupRun.prepResumed"
+  | "groupRun.prepFastForwarded"
+  | "groupRun.prepTimeAdded"
+  | "groupRun.aborted"
+  | "groupRun.gateReleasedDeviceOffline"
+  | "groupRun.gateReleasedPilotUnconfirmed";
+
+export type RoundAdvanceEventType = "roundAdvance.overridden";
+
+export interface GroupRunActionBasePayload {
+  competitionId: string;
+  roundNumber: number;
+  groupFlyingOrder: number;
+}
+
+export interface PrepPausedPayload extends GroupRunActionBasePayload {
+  // No additional fields — the phase/remaining-time state is read from the
+  // phase provider; this event records only that the action occurred.
+}
+
+export interface PrepResumedPayload extends GroupRunActionBasePayload {
+  // No additional fields — analogous to PrepPausedPayload.
+}
+
+export interface PrepFastForwardedPayload extends GroupRunActionBasePayload {
+  // Fixed 60-second step per AC2 — no configurable delta in v1.
+  secondsRemoved: 60;
+}
+
+export interface PrepTimeAddedPayload extends GroupRunActionBasePayload {
+  // Fixed 60-second step per AC3 — no configurable delta in v1, no repeat cap.
+  secondsAdded: 60;
+}
+
+export interface AnnulledFactRef {
+  factType: string;
+  rosterEntryId: string;
+  taskId: string;
+}
+
+export interface GroupAbortedPayload extends GroupRunActionBasePayload {
+  // Full annulment: references to raw captures (scoring.resultCaptured) and
+  // derived scoring facts (scoring.lonePilotResolved, scoring.annulmentOverrideRequested)
+  // for the aborted group's run — never empty when the group had any captures.
+  annulledFacts: AnnulledFactRef[];
+  reason: string;
+}
+
+export interface PrepGateReleasedDeviceOfflinePayload extends GroupRunActionBasePayload {
+  rosterEntryId: string;
+  deviceId: string;
+}
+
+export interface PrepGateReleasedPilotUnconfirmedPayload extends GroupRunActionBasePayload {
+  rosterEntryId: string;
+  deviceId: string;
+}
+
+export interface OutstandingItemResolution {
+  code: string;
+  consequence: "flagged-anomaly" | "zeroed" | "reflight-lapsed";
+  referenceId: string;
+}
+
+export interface RoundAdvanceOverriddenPayload {
+  competitionId: string;
+  roundNumber: number;
+  // One resolution per outstanding item, mapping each to its routed consequence.
+  resolutions: OutstandingItemResolution[];
+}
+
+export type GroupRunEventPayload =
+  | PrepPausedPayload
+  | PrepResumedPayload
+  | PrepFastForwardedPayload
+  | PrepTimeAddedPayload
+  | GroupAbortedPayload
+  | PrepGateReleasedDeviceOfflinePayload
+  | PrepGateReleasedPilotUnconfirmedPayload;
+
+export type RoundAdvanceEventPayload = RoundAdvanceOverriddenPayload;
+
+// Per-competition group-run phase-transition events (STORY-001-040). System-
+// emitted facts (a countdown reaching zero, or group-start trigger), not
+// operator actions. Filed under scope = competitionId, same as other content-
+// level events. No Attribution on any of these events — a deliberate
+// departure per Approach §4 — since they represent system-driven timing, not
+// operator decisions. EventRecord.actorName/originClient are populated with
+// fixed system sentinels, never left null and never presented as if an operator acted.
+//
+// Resolved decisions reflected in these payloads (user-confirmed, 202607161530):
+// - Phases advance in exactly the order Preparation → WorkingTime → Landing
+//   with no manual trigger between them for a duration-shaped task (AC1).
+// - The end-of-working-time boundary (AC3) is the instant groupRun.landingWindowStarted
+//   is appended; its EventRecord.timestamp *is* the boundary marker.
+// - Working-time and landing-window duration are snapshotted at phase-start
+//   (durationSeconds field) and never re-read from config afterward, even if
+//   CompetitionTaskConfig is edited mid-run.
+// - AC6's "clean reset" is achieved structurally via per-run
+//   (competitionId, roundNumber, groupFlyingOrder) keying with no explicit
+//   reset mutation.
+
+export type GroupRunPhaseEventType =
+  | "groupRun.preparationStarted"
+  | "groupRun.workingTimeStarted"
+  | "groupRun.landingWindowStarted"
+  | "groupRun.completed";
+
+export interface GroupRunEventBasePayload {
+  competitionId: string;
+  roundNumber: number;
+  groupFlyingOrder: number;
+}
+
+export interface PreparationStartedPayload extends GroupRunEventBasePayload {
+  durationSeconds: number;
+}
+
+export interface WorkingTimeStartedPayload extends GroupRunEventBasePayload {
+  durationSeconds: number;
+}
+
+export interface LandingWindowStartedPayload extends GroupRunEventBasePayload {
+  durationSeconds: number;
+}
+
+export interface GroupRunCompletedPayload extends GroupRunEventBasePayload {
+  // No additional fields — the run is simply complete.
+}
+
+export type GroupRunPhaseEventPayload =
+  | PreparationStartedPayload
+  | WorkingTimeStartedPayload
+  | LandingWindowStartedPayload
+  | GroupRunCompletedPayload;

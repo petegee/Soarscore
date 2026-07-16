@@ -20,13 +20,21 @@ import {
 import { CompetitionProjection } from "./competitions/projection.js";
 import {
   NoScoresYetProvider,
+  NothingOutstandingNoScoreProvider,
+  NothingOutstandingReflightProvider,
   ProjectionFinalisationProgressProvider,
   ProjectionLockStateProvider,
   type CapturedScoresProvider,
   type FinalisationProgressProvider,
   type LockStateProvider,
+  type NoScoreOutstandingProvider,
+  type ReflightOutstandingProvider,
   type StartStateProvider,
 } from "./competitions/state-providers.js";
+import {
+  ProjectionScoreCompletenessProvider,
+  type ScoreCompletenessProvider,
+} from "./scoring/completeness-provider.js";
 import { CompetitionService } from "./competitions/service.js";
 import {
   CompetitionDeleteNeedsConfirmationError,
@@ -96,11 +104,36 @@ import {
 } from "./scoring/errors.js";
 import { ProjectionEntryScoresProvider } from "./scoring/entry-scores-provider.js";
 import { registerScoringRoutes } from "./routes/scoring.js";
+import { registerGroupRunRoutes, registerGroupStartRoutes, registerGroupRunReadRoutes } from "./routes/group-run.js";
+import { GroupStartService } from "./group-run/start-service.js";
+import { GroupCompletionReactor } from "./group-run/completion-reactor.js";
+import { PrepGateHoldViewService, StubGroupRunPhaseProvider } from "./group-run/prep-gate-view.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { LifecycleProjection } from "./lifecycle/projection.js";
 import { LifecycleGuard } from "./lifecycle/guard.js";
 import { ProjectionStartStateProvider } from "./lifecycle/start-state-provider.js";
 import { TransitionNotAllowedError } from "./lifecycle/errors.js";
+import { GroupRunControlService } from "./group-run/service.js";
+import { GroupRunProjection } from "./group-run/projection.js";
+import { GroupRunScheduler } from "./group-run/scheduler.js";
+import {
+  ProjectionGroupRunPhaseProvider,
+  TaskConfigDurationSource,
+  UnconfiguredFieldAidSettingsProvider,
+  TemporaryAllDurationShapedProvider,
+} from "./group-run/state-providers.js";
+import {
+  GroupNotInPreparationError,
+  PrepAtFloorError,
+  PrepGateNotHeldError,
+  GroupNotInWorkingTimeError,
+  RoundAdvanceNotBlockedError,
+  GroupNotFoundError,
+  FieldAidSettingsNotConfiguredError,
+  NoDurationShapedTaskConfiguredError,
+  GroupRunNotFoundError,
+  NoGroupReadyToStartError,
+} from "./group-run/errors.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -136,6 +169,20 @@ export interface AppOptions {
   // the lifecycle-backed ProjectionStartStateProvider (STORY-001-025), which
   // flips the task-config authority attribution once proceedings have started.
   startStateProvider?: StartStateProvider;
+  // Override seam (STORY-001-043): production defaults to
+  // NothingOutstandingNoScoreProvider (no-op stub); STORY-001-031 supplies the
+  // real implementation reading genuinely-resolvable no-scores. Tests can inject
+  // for isolation.
+  noScoreOutstandingProvider?: NoScoreOutstandingProvider;
+  // Override seam (STORY-001-043): production defaults to
+  // NothingOutstandingReflightProvider (no-op stub); STORY-001-028 supplies the
+  // real implementation reading approved-but-unflown re-flights. Tests can
+  // inject for isolation.
+  reflightOutstandingProvider?: ReflightOutstandingProvider;
+  // Override seam (STORY-001-043): production defaults to
+  // ProjectionScoreCompletenessProvider (reads ScoringProjection); tests can
+  // inject AllSeatsCompleteProvider for skipping the gate, or a custom stub.
+  scoreCompletenessProvider?: ScoreCompletenessProvider;
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
@@ -181,6 +228,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // (matching the existing ordering discipline).
   const scoringProjection = new ScoringProjection();
   scoringProjection.rebuild(eventStore.readAll());
+  // Group-run projection (STORY-001-040): phase-transition events for the
+  // timer engine, also a pure loader, filed under scope = competitionId.
+  // Constructed after scoring, before lifecycle (it has no dependencies,
+  // but we construct it early for organizational clarity).
+  const groupRunProjection = new GroupRunProjection();
+  groupRunProjection.rebuild(eventStore.readAll());
   // Lifecycle projection (STORY-001-024): the single authoritative lifecycle
   // state per competition, derived from the log. Constructed after roster and
   // draw (it reads both, read-only, via injection — never their services, so no
@@ -225,6 +278,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
   );
   classModelService.seedStockModels();
 
+  // Group-composition provider (STORY-001-011): decouples scoring from draw
+  // module. Created early here because CompetitionService (STORY-001-043) needs
+  // it for the round-advance completeness scan. Wired in both services below.
+  const groupCompositionProvider = new DrawServiceGroupCompositionProvider(drawProjection);
+
   const competitionService = new CompetitionService(
     eventStore,
     competitionProjection,
@@ -242,6 +300,31 @@ export function buildApp(options: AppOptions): FastifyInstance {
     // fixed-count stub to drive each finalisation outcome.
     options.finalisationProgressProvider ??
       new ProjectionFinalisationProgressProvider(lifecycleProjection),
+    // STORY-001-043: the no-score-outstanding consumption seam. Production
+    // defaults to NothingOutstandingNoScoreProvider (no-op stub). STORY-001-031
+    // swaps in the real implementation reading genuinely-resolvable no-scores.
+    options.noScoreOutstandingProvider ?? new NothingOutstandingNoScoreProvider(),
+    // STORY-001-043: the re-flight-outstanding consumption seam. Production
+    // defaults to NothingOutstandingReflightProvider (no-op stub). STORY-001-028
+    // swaps in the real implementation reading approved-but-unflown re-flights.
+    options.reflightOutstandingProvider ?? new NothingOutstandingReflightProvider(),
+    // STORY-001-043: the score-completeness seam. Production defaults to
+    // ProjectionScoreCompletenessProvider (reads ScoringProjection). Tests can
+    // inject AllSeatsCompleteProvider to skip the gate, or a custom stub.
+    options.scoreCompletenessProvider ??
+      new ProjectionScoreCompletenessProvider(scoringProjection),
+    // STORY-001-043: the roster projection for resolving rosterEntryId →
+    // pilotName in outstanding-item messages. Reusing the existing projection
+    // already rebuilt from the event log.
+    rosterProjection,
+    // STORY-001-043: the group-composition provider for scanning effective
+    // groups per round/task. Reusing the same provider instance wired into
+    // ScoringService below for consistency.
+    groupCompositionProvider,
+    // STORY-001-043: the pilot library projection for resolving pilotId →
+    // pilotName when building outstanding-item messages. Reusing the existing
+    // projection already rebuilt from the event log.
+    projection,
   );
 
   // After CompetitionService: the seed path delegates competition creation to
@@ -302,13 +385,86 @@ export function buildApp(options: AppOptions): FastifyInstance {
   // only through the GroupCompositionProvider interface it owns — the
   // concrete draw-side implementation is wired in here, so neither module
   // imports the other (no cycle, Safeguard 9).
-  const groupCompositionProvider = new DrawServiceGroupCompositionProvider(drawProjection);
+  // Note: groupCompositionProvider was created earlier for CompetitionService.
   const scoringService = new ScoringService(
     eventStore,
     scoringProjection,
     classModelProjection,
     competitionProjection,
     groupCompositionProvider,
+    rosterProjection,
+  );
+
+  // Group-run scheduler (STORY-001-040): the phase-transition engine that
+  // drives duration-shaped groups through Preparation → WorkingTime → Landing.
+  // STORY-001-044 triggers it via onGroupStarted when it appends group.opened.
+  const durationSource = new TaskConfigDurationSource(
+    taskConfigService,
+    new UnconfiguredFieldAidSettingsProvider(),
+  );
+  const taskShapeProvider = new TemporaryAllDurationShapedProvider();
+  const groupRunScheduler = new GroupRunScheduler(
+    eventStore,
+    groupRunProjection,
+    durationSource,
+    taskShapeProvider,
+  );
+  groupRunScheduler.start(1000); // Tick every 1 second
+
+  // Real GroupRunPhaseProvider (STORY-001-040): satisfies the seam
+  // STORY-001-032 already stubbed with this interface.
+  const groupRunPhaseProvider = new ProjectionGroupRunPhaseProvider(groupRunProjection);
+
+  // Run-control (STORY-001-032): Contest Director actions on a live group
+  // (pause/resume/fast-forward/add-time/abort/gate-release/override). Now
+  // wired with the real GroupRunPhaseProvider from STORY-001-040.
+  const groupRunControlService = new GroupRunControlService(
+    eventStore,
+    groupRunPhaseProvider,
+    // Stub no-score intake: no-op (STORY-001-031 will implement for real)
+    {
+      createNoScore: async () => {},
+    },
+    // Stub outstanding items provider: returns empty (STORY-001-043 will implement)
+    {
+      getOutstandingItems: async () => [],
+    },
+    scoringProjection,
+  );
+
+  // Group start (STORY-001-044): the single deliberate operator action that
+  // starts every group. Manages group.opened emission and hands off to either
+  // STORY-001-040's phase engine (duration-shaped) or its own reactive
+  // completion listener (manual-run).
+  const completionReactor = new GroupCompletionReactor(
+    eventStore,
+    lifecycleProjection,
+    groupCompositionProvider,
+    classModelProjection,
+    options.scoreCompletenessProvider ??
+      new ProjectionScoreCompletenessProvider(scoringProjection),
+    options.noScoreOutstandingProvider ?? new NothingOutstandingNoScoreProvider(),
+    options.reflightOutstandingProvider ?? new NothingOutstandingReflightProvider(),
+  );
+
+  const groupStartService = new GroupStartService(
+    eventStore,
+    groupCompositionProvider,
+    classModelProjection,
+    competitionProjection,
+    lifecycleProjection,
+    options.finalisationProgressProvider ??
+      new ProjectionFinalisationProgressProvider(lifecycleProjection),
+    lifecycleGuard,
+    groupRunScheduler, // STORY-001-040's scheduler hook (real or stub)
+    completionReactor,
+  );
+
+  // Prep-gate hold view (STORY-001-044): read-only gate state display.
+  // Stub until STORY-001-034 lands with real device-confirmation mechanics.
+  const prepGateHoldProvider = new PrepGateHoldViewService(
+    lifecycleProjection,
+    new StubGroupRunPhaseProvider(),
     rosterProjection,
   );
 
@@ -321,6 +477,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
   registerTaskConfigRoutes(app, taskConfigService);
   registerDrawRoutes(app, drawService);
   registerScoringRoutes(app, scoringService);
+  registerGroupRunRoutes(app, groupRunControlService);
+  registerGroupStartRoutes(app, groupStartService, prepGateHoldProvider);
+  registerGroupRunReadRoutes(app, groupRunProjection);
 
   if (options.serveStatic) {
     app.register(fastifyStatic, {
@@ -455,6 +614,20 @@ export function buildApp(options: AppOptions): FastifyInstance {
       reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }
+    // STORY-001-040: group-run phase-transition engine errors. Inserted after
+    // task-config block and before draw block (Safeguard 8 compliance).
+    if (error instanceof FieldAidSettingsNotConfiguredError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof NoDurationShapedTaskConfiguredError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof GroupRunNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
     if (error instanceof DrawSpecNotFoundError) {
       reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
@@ -499,6 +672,39 @@ export function buildApp(options: AppOptions): FastifyInstance {
       reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
       return;
     }
+    // STORY-001-032: run-control domain errors. Inserted after scoring block,
+    // before generic lifecycle fallback (Safeguard 8 compliance).
+    if (error instanceof GroupNotInPreparationError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof PrepAtFloorError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof PrepGateNotHeldError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof GroupNotInWorkingTimeError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof RoundAdvanceNotBlockedError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    if (error instanceof GroupNotFoundError) {
+      reply.code(404).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
+    // STORY-001-044: group start control and manual run tasks. Inserted after
+    // STORY-001-032's run-control block and before generic lifecycle fallback
+    // (Safeguard 8 compliance).
+    if (error instanceof NoGroupReadyToStartError) {
+      reply.code(409).send({ code: error.code, message: error.message } satisfies ErrorResponse);
+      return;
+    }
     if (error instanceof TransitionNotAllowedError) {
       reply.code(409).send({
         code: error.code,
@@ -517,6 +723,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   });
 
   app.addHook("onClose", async () => {
+    groupRunScheduler.stop();
     eventStore.close();
   });
 
